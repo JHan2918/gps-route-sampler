@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Point = { lat: number; lng: number };
 type Sample = Point & { no: number; distance: number };
 type UtmPoint = { zone: string; easting: number; northing: number };
+type KoreaTmPoint = { easting: number; northing: number };
 
 declare global {
   interface Window { naver?: any; initNaverMap?: () => void; navermap_authFailure?: () => void }
@@ -37,6 +38,36 @@ function toUtm({ lat, lng }: Point): UtmPoint {
   let northing = k0 * (m + n * Math.tan(latRad) * (A ** 2 / 2 + (5 - t + 9 * c + 4 * c ** 2) * A ** 4 / 24 + (61 - 58 * t + t ** 2 + 600 * c - 330 * eccPrimeSquared) * A ** 6 / 720));
   if (lat < 0) northing += 10000000;
   return { zone: `${zoneNumber}${lat >= 0 ? "N" : "S"}`, easting, northing };
+}
+
+function toKoreaCentral({ lat, lng }: Point): KoreaTmPoint {
+  const a = 6378137;
+  const invF = 298.257222101;
+  const f = 1 / invF;
+  const e2 = 2 * f - f * f;
+  const ep2 = e2 / (1 - e2);
+  const k0 = 1;
+  const lat0 = 38 * Math.PI / 180;
+  const lon0 = 127 * Math.PI / 180;
+  const phi = lat * Math.PI / 180;
+  const lambda = lng * Math.PI / 180;
+  const meridional = (p: number) => a * (
+    (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256) * p
+    - (3 * e2 / 8 + 3 * e2 ** 2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * p)
+    + (15 * e2 ** 2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * p)
+    - (35 * e2 ** 3 / 3072) * Math.sin(6 * p)
+  );
+  const sinPhi = Math.sin(phi);
+  const cosPhi = Math.cos(phi);
+  const tanPhi = Math.tan(phi);
+  const n = a / Math.sqrt(1 - e2 * sinPhi ** 2);
+  const t = tanPhi ** 2;
+  const c = ep2 * cosPhi ** 2;
+  const A = cosPhi * (lambda - lon0);
+  const m = meridional(phi) - meridional(lat0);
+  const easting = 200000 + k0 * n * (A + (1 - t + c) * A ** 3 / 6 + (5 - 18 * t + t ** 2 + 72 * c - 58 * ep2) * A ** 5 / 120);
+  const northing = 600000 + k0 * (m + n * tanPhi * (A ** 2 / 2 + (5 - t + 9 * c + 4 * c ** 2) * A ** 4 / 24 + (61 - 58 * t + t ** 2 + 600 * c - 330 * ep2) * A ** 6 / 720));
+  return { easting, northing };
 }
 
 function distance(a: Point, b: Point) {
@@ -199,10 +230,11 @@ export default function Home() {
   }
 
   function downloadCsv() {
-    const header = "번호,누적거리_m,위도,경도,UTM_Zone,Easting_E_m,Northing_N_m\r\n";
+    const header = "번호,누적거리_m,위도,경도,UTM_Zone,UTM_E_m,UTM_N_m,EPSG5186_E_m,EPSG5186_N_m\r\n";
     const rows = samples.map((p) => {
       const utm = toUtm(p);
-      return `${p.no},${p.distance.toFixed(2)},${p.lat.toFixed(7)},${p.lng.toFixed(7)},${utm.zone},${utm.easting.toFixed(3)},${utm.northing.toFixed(3)}`;
+      const korea = toKoreaCentral(p);
+      return `${p.no},${p.distance.toFixed(2)},${p.lat.toFixed(7)},${p.lng.toFixed(7)},${utm.zone},${utm.easting.toFixed(3)},${utm.northing.toFixed(3)},${korea.easting.toFixed(3)},${korea.northing.toFixed(3)}`;
     }).join("\r\n");
     const blob = new Blob(["\ufeff" + header + rows], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a");
@@ -232,7 +264,8 @@ export default function Home() {
             <b>확인할 지점을 클릭하세요</b>
             {testPoint ? (() => {
               const utm = toUtm(testPoint);
-              return <><p>위도 <strong>{testPoint.lat.toFixed(7)}</strong></p><p>경도 <strong>{testPoint.lng.toFixed(7)}</strong></p><div className="utmDivider" /><p>UTM Zone <strong>{utm.zone}</strong></p><p>N (Northing) <strong>{utm.northing.toFixed(3)} m</strong></p><p>E (Easting) <strong>{utm.easting.toFixed(3)} m</strong></p></>;
+              const korea = toKoreaCentral(testPoint);
+              return <><p>위도 <strong>{testPoint.lat.toFixed(7)}</strong></p><p>경도 <strong>{testPoint.lng.toFixed(7)}</strong></p><div className="utmDivider" /><p>UTM Zone <strong>{utm.zone}</strong></p><p>UTM N <strong>{utm.northing.toFixed(3)} m</strong></p><p>UTM E <strong>{utm.easting.toFixed(3)} m</strong></p><div className="utmDivider" /><p>국내 중부원점 <strong>EPSG:5186</strong></p><p>N (Northing) <strong>{korea.northing.toFixed(3)} m</strong></p><p>E (Easting) <strong>{korea.easting.toFixed(3)} m</strong></p></>;
             })() : <p>클릭한 한 점의 위경도와 UTM 좌표가 여기에 표시됩니다.</p>}
           </div>}
           <div className="step"><span>1</span><div><b>경로 그리기</b><p>지도에서 시점부터 종점까지 도로를 따라 차례로 클릭하세요.</p></div></div>
