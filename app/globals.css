@@ -44,6 +44,15 @@ button:disabled { background:#dbe4df; color:#829089; cursor:not-allowed; }
 .layerBox>b { display:block; font-size:12px; }
 .layerBox>p { margin:5px 0 9px; color:var(--muted); font-size:10px; line-height:1.45; }
 .layerBox .check { margin:7px 0; }
+.subOptions { margin:14px 0 2px; padding:12px; border:1px solid #cfe9da; border-radius:10px; background:#f3fbf6; }
+.subOptions>.check { margin:0; color:#176c40; font-weight:700; }
+.subOptionGrid { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:11px; }
+.subOptionGrid label { margin:0; color:var(--muted); font-size:10px; }
+.subOptionGrid label:first-child { grid-column:1/-1; }
+.subOptionGrid input,.subOptionGrid select { width:100%; height:36px; margin-top:5px; padding:0 9px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); font-size:12px; }
+.hideConstruction { height:38px; margin-top:8px; border:1px solid #9aa9a1; background:#fff; color:#53635b; font-size:12px; }
+.subCount { display:flex; justify-content:space-between; margin:0 0 5px; color:var(--muted); font-size:12px; }
+.subCount strong { color:var(--ink); }
 .divider { height:1px; background:var(--line); margin:25px 0 16px; }
 dl { margin:0; }
 dl div { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; }
@@ -64,7 +73,9 @@ h2 { margin:0 0 9px; font-size:19px; letter-spacing:-.03em; }
 .vertex { width:16px; height:16px; border:3px solid #fff; border-radius:50%; background:#1e2c26; box-shadow:0 2px 8px #0005; color:transparent; font:700 9px/16px Arial; text-align:center; }
 .vertex.start,.vertex.end { width:22px; height:22px; margin:-3px; line-height:16px; color:#fff; background:#16844a; }
 .vertex.end { background:#e95745; }
-.sample-marker { width:28px; height:28px; display:grid; place-items:center; border:2px solid #fff; border-radius:50%; background:#15231e; color:#fff; box-shadow:0 2px 9px #0006; font:700 11px Arial; }
+.sample-marker { min-width:30px; height:30px; padding:0 4px; display:grid; place-items:center; border:2px solid #fff; border-radius:15px; background:#15231e; color:#fff; box-shadow:0 2px 9px #0006; font:700 10px Arial; }
+.sub-marker { width:12px; height:12px; border:2px solid #fff; border-radius:50%; background:#ff7a2f; box-shadow:0 2px 7px #0007; cursor:help; }
+.sub-marker:hover { width:16px; height:16px; margin:-2px; background:#e95721; }
 .test-marker { width:48px; height:30px; display:grid; place-items:center; position:relative; border:2px solid #fff; border-radius:15px; background:#f2a93b; color:#fff; box-shadow:0 3px 10px #0005; font:700 11px Arial; }
 .test-marker:after { content:""; position:absolute; bottom:-8px; left:18px; border-width:7px 5px 0; border-style:solid; border-color:#f2a93b transparent transparent; }
 @media(max-width:760px){ body{padding:12px}.topbar{height:74px}.status{display:none}.workspace{grid-template-columns:1fr}.panel{order:2}.mapShell{min-height:55vh} }

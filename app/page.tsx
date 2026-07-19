@@ -4,7 +4,8 @@ import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Point = { lat: number; lng: number };
-type Sample = Point & { no: number; distance: number };
+type Sample = Point & { no: number; distance: number; bearing: number };
+type SubPoint = Point & { name: string; parent: string; distance: number; offset: number; side: "left" | "right" };
 type UtmPoint = { zone: string; easting: number; northing: number };
 type KoreaTmPoint = { easting: number; northing: number };
 
@@ -82,6 +83,21 @@ function interpolate(a: Point, b: Point, ratio: number): Point {
   return { lat: a.lat + (b.lat - a.lat) * ratio, lng: a.lng + (b.lng - a.lng) * ratio };
 }
 
+function bearing(a: Point, b: Point) {
+  const rad = Math.PI / 180;
+  const p1 = a.lat * rad, p2 = b.lat * rad, dl = (b.lng - a.lng) * rad;
+  return (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / rad + 360) % 360;
+}
+
+function destination(point: Point, bearingDegrees: number, meters: number): Point {
+  const rad = Math.PI / 180;
+  const angular = meters / R;
+  const p1 = point.lat * rad, l1 = point.lng * rad, direction = bearingDegrees * rad;
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(angular) + Math.cos(p1) * Math.sin(angular) * Math.cos(direction));
+  const l2 = l1 + Math.atan2(Math.sin(direction) * Math.sin(angular) * Math.cos(p1), Math.cos(angular) - Math.sin(p1) * Math.sin(p2));
+  return { lat: p2 / rad, lng: ((l2 / rad + 540) % 360) - 180 };
+}
+
 function createSamples(path: Point[], interval: number, includeEnd: boolean) {
   if (path.length < 2 || interval <= 0) return { samples: [] as Sample[], total: 0 };
   const lengths = path.slice(1).map((p, i) => distance(path[i], p));
@@ -96,7 +112,7 @@ function createSamples(path: Point[], interval: number, includeEnd: boolean) {
     }
     const len = lengths[segment];
     const ratio = len ? Math.max(0, Math.min(1, (target - passed) / len)) : 0;
-    return { ...interpolate(path[segment], path[segment + 1], ratio), no: index + 1, distance: target };
+    return { ...interpolate(path[segment], path[segment + 1], ratio), no: index + 1, distance: target, bearing: bearing(path[segment], path[segment + 1]) };
   });
   return { samples, total };
 }
@@ -108,6 +124,7 @@ export default function Home() {
   const clickRef = useRef<any>(null);
   const vertexMarkers = useRef<any[]>([]);
   const sampleMarkers = useRef<any[]>([]);
+  const subMarkers = useRef<any[]>([]);
   const testMarker = useRef<any>(null);
   const modeRef = useRef<"draw" | "test">("draw");
   const cadastralLayer = useRef<any>(null);
@@ -118,16 +135,27 @@ export default function Home() {
   const [path, setPath] = useState<Point[]>([]);
   const [interval, setInterval] = useState(5);
   const [includeEnd, setIncludeEnd] = useState(true);
+  const [enableSubpoints, setEnableSubpoints] = useState(false);
+  const [subSpacing, setSubSpacing] = useState(3);
+  const [subCount, setSubCount] = useState(4);
+  const [subSide, setSubSide] = useState<"left" | "right">("left");
+  const [constructionVisible, setConstructionVisible] = useState(true);
   const [showCadastral, setShowCadastral] = useState(false);
   const [showTraffic, setShowTraffic] = useState(false);
   const [mode, setMode] = useState<"draw" | "test">("draw");
   const [testPoint, setTestPoint] = useState<Point | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
+  const [subPoints, setSubPoints] = useState<SubPoint[]>([]);
   const [total, setTotal] = useState(0);
 
   const clearSampleMarkers = useCallback(() => {
     sampleMarkers.current.forEach((m) => m.setMap(null));
     sampleMarkers.current = [];
+  }, []);
+
+  const clearSubMarkers = useCallback(() => {
+    subMarkers.current.forEach((m) => m.setMap(null));
+    subMarkers.current = [];
   }, []);
 
   const initMap = useCallback(() => {
@@ -156,6 +184,7 @@ export default function Home() {
       }
       setPath((prev) => [...prev, { lat: e.coord.lat(), lng: e.coord.lng() }]);
       setSamples([]);
+      setSubPoints([]);
     });
     n.Event.addListener(map, "idle", () => setReady(true));
     requestAnimationFrame(() => n.Event.trigger(map, "resize"));
@@ -189,6 +218,8 @@ export default function Home() {
   useEffect(() => {
     const n = window.naver?.maps;
     if (!n || !mapRef.current) return;
+    lineRef.current.setMap(mapRef.current);
+    setConstructionVisible(true);
     lineRef.current.setPath(path.map((p) => new n.LatLng(p.lat, p.lng)));
     vertexMarkers.current.forEach((m) => m.setMap(null));
     vertexMarkers.current = path.map((p, i) => new n.Marker({
@@ -196,8 +227,9 @@ export default function Home() {
       icon: { content: `<div class="vertex ${i === 0 ? "start" : i === path.length - 1 ? "end" : ""}">${i === 0 ? "시" : i === path.length - 1 ? "종" : ""}</div>`, anchor: new n.Point(8, 8) },
     }));
     clearSampleMarkers();
-    setSamples([]); setTotal(0);
-  }, [path, clearSampleMarkers]);
+    clearSubMarkers();
+    setSamples([]); setSubPoints([]); setTotal(0);
+  }, [path, clearSampleMarkers, clearSubMarkers]);
 
   useEffect(() => () => {
     if (clickRef.current && window.naver?.maps) window.naver.maps.Event.removeListener(clickRef.current);
@@ -206,12 +238,33 @@ export default function Home() {
   function calculate() {
     if (path.length < 2 || !Number.isFinite(interval) || interval <= 0) return;
     const result = createSamples(path, interval, includeEnd);
-    setSamples(result.samples); setTotal(result.total); clearSampleMarkers();
+    setSamples(result.samples); setTotal(result.total); clearSampleMarkers(); clearSubMarkers();
     const n = window.naver.maps;
     sampleMarkers.current = result.samples.map((p) => new n.Marker({
       map: mapRef.current, position: new n.LatLng(p.lat, p.lng),
-      zIndex: 100, icon: { content: `<div class="sample-marker">${p.no}</div>`, anchor: new n.Point(14, 14) },
+      title: `t${p.no}`, zIndex: 100, icon: { content: `<div class="sample-marker" title="t${p.no}">t${p.no}</div>`, anchor: new n.Point(15, 15) },
     }));
+    const generated: SubPoint[] = [];
+    if (enableSubpoints && subSpacing > 0 && subCount > 0) {
+      result.samples.forEach((p) => {
+        for (let i = 1; i <= Math.floor(subCount); i++) {
+          const name = `t${p.no}-${i}`;
+          generated.push({ ...destination(p, p.bearing + (subSide === "right" ? 90 : -90), subSpacing * i), name, parent: `t${p.no}`, distance: p.distance, offset: subSpacing * i, side: subSide });
+        }
+      });
+    }
+    setSubPoints(generated);
+    subMarkers.current = generated.map((p) => new n.Marker({
+      map: mapRef.current, position: new n.LatLng(p.lat, p.lng), title: p.name, zIndex: 90,
+      icon: { content: `<div class="sub-marker" title="${p.name}"></div>`, anchor: new n.Point(6, 6) },
+    }));
+  }
+
+  function hideConstruction() {
+    if (lineRef.current) lineRef.current.setMap(null);
+    vertexMarkers.current.forEach((m) => m.setMap(null));
+    vertexMarkers.current = [];
+    setConstructionVisible(false);
   }
 
   function reset() {
@@ -219,24 +272,29 @@ export default function Home() {
     vertexMarkers.current.forEach((m) => m.setMap(null));
     vertexMarkers.current = [];
     clearSampleMarkers();
+    clearSubMarkers();
     if (testMarker.current) {
       testMarker.current.setMap(null);
       testMarker.current = null;
     }
     setPath([]);
     setSamples([]);
+    setSubPoints([]);
     setTotal(0);
     setTestPoint(null);
   }
 
   function downloadCsv() {
     const header = "번호,누적거리_m,위도,경도,UTM_Zone,UTM_E_m,UTM_N_m,EPSG5186_E_m,EPSG5186_N_m\r\n";
-    const rows = samples.map((p) => {
+    const csvHeader = "이름,구분,기준점,진행거리_m,직각방향,직각거리_m,위도,경도,UTM_Zone,UTM_E_m,UTM_N_m,EPSG5186_E_m,EPSG5186_N_m\r\n";
+    const baseRows = samples.map((p) => ({ ...p, name: `t${p.no}`, parent: `t${p.no}`, kind: "기준점", side: "" as const, offset: 0 }));
+    const rows = [...baseRows, ...subPoints.map((p) => ({ ...p, kind: "서브포인트" }))].map((p) => {
       const utm = toUtm(p);
       const korea = toKoreaCentral(p);
-      return `${p.no},${p.distance.toFixed(2)},${p.lat.toFixed(7)},${p.lng.toFixed(7)},${utm.zone},${utm.easting.toFixed(3)},${utm.northing.toFixed(3)},${korea.easting.toFixed(3)},${korea.northing.toFixed(3)}`;
+      const side = p.side === "left" ? "왼쪽" : p.side === "right" ? "오른쪽" : "";
+      return `${p.name},${p.kind},${p.parent},${p.distance.toFixed(2)},${side},${p.offset.toFixed(2)},${p.lat.toFixed(7)},${p.lng.toFixed(7)},${utm.zone},${utm.easting.toFixed(3)},${utm.northing.toFixed(3)},${korea.easting.toFixed(3)},${korea.northing.toFixed(3)}`;
     }).join("\r\n");
-    const blob = new Blob(["\ufeff" + header + rows], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["\ufeff" + csvHeader + rows], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a");
     a.href = url; a.download = `gps-route-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
   }
@@ -274,6 +332,14 @@ export default function Home() {
           <label htmlFor="interval">조사 간격</label>
           <div className="inputRow"><input id="interval" type="number" min="0.1" step="0.1" value={interval} onChange={(e) => setInterval(Number(e.target.value))} /><em>m</em></div>
           <label className="check"><input type="checkbox" checked={includeEnd} onChange={(e) => setIncludeEnd(e.target.checked)} /> 마지막 종점 포함</label>
+          <div className="subOptions">
+            <label className="check"><input type="checkbox" checked={enableSubpoints} onChange={(e) => setEnableSubpoints(e.target.checked)} /> 도로 직각 서브포인트 생성</label>
+            {enableSubpoints && <div className="subOptionGrid">
+              <label>도로 방향<select value={subSide} onChange={(e) => setSubSide(e.target.value as "left" | "right")}><option value="left">진행방향 왼쪽</option><option value="right">진행방향 오른쪽</option></select></label>
+              <label>포인트 간격 (m)<input type="number" min="0.1" step="0.1" value={subSpacing} onChange={(e) => setSubSpacing(Number(e.target.value))} /></label>
+              <label>포인트 개수<input type="number" min="1" step="1" value={subCount} onChange={(e) => setSubCount(Number(e.target.value))} /></label>
+            </div>}
+          </div>
           <div className="layerBox">
             <b>지도 레이어</b>
             <p>지도 왼쪽 위 메뉴에서 일반·위성·지형을 전환할 수 있습니다.</p>
@@ -281,7 +347,9 @@ export default function Home() {
             <label className="check"><input type="checkbox" checked={showTraffic} onChange={(e) => setShowTraffic(e.target.checked)} disabled={!ready} /> 교통정보 표시</label>
           </div>
           <button onClick={calculate} disabled={path.length < 2 || interval <= 0}>조사 위치 계산</button>
+          <button className="hideConstruction" onClick={hideConstruction} disabled={!samples.length || !constructionVisible}>폴리라인·그리기 점 숨기기</button>
           <div className="divider" />
+          {!!subPoints.length && <p className="subCount">서브포인트 <strong>{subPoints.length}개</strong></p>}
           <dl><div><dt>경로 꼭짓점</dt><dd>{path.length}개</dd></div><div><dt>전체 경로</dt><dd>{total ? total.toFixed(2) : "—"} m</dd></div><div><dt>조사 위치</dt><dd>{samples.length || "—"}개</dd></div></dl>
           <button className="secondary" onClick={downloadCsv} disabled={!samples.length}>CSV 다운로드</button>
         </aside>
