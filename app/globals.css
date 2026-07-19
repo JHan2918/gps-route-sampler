@@ -15,10 +15,18 @@ h1 { margin:0; font-size:25px; letter-spacing:-.04em; }
 .workspace { min-height:calc(100vh - 130px); display:grid; grid-template-columns:310px 1fr; gap:14px; }
 .panel,.mapShell { border:1px solid var(--line); border-radius:18px; background:#fff; box-shadow:0 10px 35px #20372c12; overflow:hidden; }
 .panel { padding:24px; }
-.modeSwitch { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-bottom:20px; padding:4px; border-radius:11px; background:#edf2ef; }
+.modeSwitch { display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; margin-bottom:20px; padding:4px; border-radius:11px; background:#edf2ef; }
 .modeSwitch button { height:34px; margin:0; padding:0 5px; border-radius:8px; background:transparent; color:#69756f; font-size:11px; }
 .modeSwitch button.active { background:#fff; color:#137944; box-shadow:0 2px 9px #20372c15; }
 .modeSwitch button.active.test { color:#8a5a08; }
+.modeSwitch button.active.import { color:#255fa4; }
+.importPanel { margin:-10px 0 20px; padding:13px; border:1px solid #cbdcf0; border-radius:10px; background:#f4f8fd; }
+.importPanel>b { font-size:12px; color:#245a96; }
+.importPanel>p { margin:6px 0 10px; color:#64758a; font-size:10px; line-height:1.5; }
+.fileButton { display:grid; place-items:center; height:38px; margin:9px 0 0; border-radius:8px; background:#2f6eae; color:#fff; cursor:pointer; }
+.fileButton input { display:none; }
+.importPanel .importSuccess { margin-bottom:0; color:#137944; font-weight:700; }
+.importPanel .importError { margin-bottom:0; color:#b4382a; font-weight:700; }
 .testPanel { margin:-10px 0 20px; padding:13px; border:1px solid #efdba8; border-radius:10px; background:#fffbef; }
 .testPanel b { font-size:12px; color:#75500b; }
 .testPanel p { margin:6px 0 0; color:#786c54; font-size:11px; line-height:1.45; }

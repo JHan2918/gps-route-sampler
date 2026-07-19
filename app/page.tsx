@@ -8,6 +8,7 @@ type Sample = Point & { no: number; distance: number; bearing: number };
 type SubPoint = Point & { name: string; parent: string; distance: number; offset: number; side: "left" | "right" };
 type UtmPoint = { zone: string; easting: number; northing: number };
 type KoreaTmPoint = { easting: number; northing: number };
+type WorkMode = "draw" | "test" | "import";
 
 declare global {
   interface Window { naver?: any; initNaverMap?: () => void; navermap_authFailure?: () => void }
@@ -117,6 +118,18 @@ function createSamples(path: Point[], interval: number, includeEnd: boolean) {
   return { samples, total };
 }
 
+function samplesFromPoints(points: Point[]): { samples: Sample[]; total: number } {
+  let total = 0;
+  const samples = points.map((point, index) => {
+    if (index > 0) total += distance(points[index - 1], point);
+    const direction = index < points.length - 1
+      ? bearing(point, points[index + 1])
+      : index > 0 ? bearing(points[index - 1], point) : 0;
+    return { ...point, no: index + 1, distance: total, bearing: direction };
+  });
+  return { samples, total };
+}
+
 export default function Home() {
   const mapNode = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -126,7 +139,7 @@ export default function Home() {
   const sampleMarkers = useRef<any[]>([]);
   const subMarkers = useRef<any[]>([]);
   const testMarker = useRef<any>(null);
-  const modeRef = useRef<"draw" | "test">("draw");
+  const modeRef = useRef<WorkMode>("test");
   const cadastralLayer = useRef<any>(null);
   const trafficLayer = useRef<any>(null);
   const [ready, setReady] = useState(false);
@@ -142,7 +155,9 @@ export default function Home() {
   const [constructionVisible, setConstructionVisible] = useState(true);
   const [showCadastral, setShowCadastral] = useState(false);
   const [showTraffic, setShowTraffic] = useState(false);
-  const [mode, setMode] = useState<"draw" | "test">("draw");
+  const [mode, setMode] = useState<WorkMode>("test");
+  const [importedPoints, setImportedPoints] = useState<Point[]>([]);
+  const [importMessage, setImportMessage] = useState("");
   const [testPoint, setTestPoint] = useState<Point | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
   const [subPoints, setSubPoints] = useState<SubPoint[]>([]);
@@ -182,6 +197,7 @@ export default function Home() {
         });
         return;
       }
+      if (modeRef.current === "import") return;
       setPath((prev) => [...prev, { lat: e.coord.lat(), lng: e.coord.lng() }]);
       setSamples([]);
       setSubPoints([]);
@@ -236,8 +252,8 @@ export default function Home() {
   }, []);
 
   function calculate() {
-    if (path.length < 2 || !Number.isFinite(interval) || interval <= 0) return;
-    const result = createSamples(path, interval, includeEnd);
+    if ((mode === "import" ? importedPoints.length : path.length) < 2 || (mode !== "import" && (!Number.isFinite(interval) || interval <= 0))) return;
+    const result = mode === "import" ? samplesFromPoints(importedPoints) : createSamples(path, interval, includeEnd);
     setSamples(result.samples); setTotal(result.total); clearSampleMarkers(); clearSubMarkers();
     const n = window.naver.maps;
     sampleMarkers.current = result.samples.map((p) => new n.Marker({
@@ -260,6 +276,38 @@ export default function Home() {
     }));
   }
 
+  async function importCoordinateFile(file?: File) {
+    if (!file) return;
+    try {
+      const text = (await file.text()).replace(/^\uFEFF/, "");
+      const lines = text.split(/\r?\n/).filter((line) => line.trim());
+      if (lines.length < 2) throw new Error("좌표 행이 없습니다.");
+      const headers = lines[0].split(",").map((value) => value.trim().replace(/^"|"$/g, "").toLowerCase());
+      const findColumn = (names: string[]) => headers.findIndex((header) => names.includes(header));
+      const latIndex = findColumn(["위도", "latitude", "lat", "y"]);
+      const lngIndex = findColumn(["경도", "longitude", "lng", "lon", "long", "x"]);
+      const kindIndex = findColumn(["구분", "type", "kind"]);
+      if (latIndex < 0 || lngIndex < 0) throw new Error("'위도/경도' 또는 'lat/lng' 열을 찾을 수 없습니다.");
+      const points = lines.slice(1).map((line) => line.split(",").map((value) => value.trim().replace(/^"|"$/g, "")))
+        .filter((cols) => kindIndex < 0 || !cols[kindIndex] || cols[kindIndex] === "기준점")
+        .map((cols) => ({ lat: Number(cols[latIndex]), lng: Number(cols[lngIndex]) }))
+        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180);
+      if (points.length < 2) throw new Error("유효한 기준 좌표가 2개 이상 필요합니다.");
+      setImportedPoints(points);
+      setPath(points);
+      setImportMessage(`${file.name}: 기준 좌표 ${points.length}개를 불러왔습니다.`);
+      const n = window.naver?.maps;
+      if (n && mapRef.current) {
+        const bounds = new n.LatLngBounds();
+        points.forEach((point) => bounds.extend(new n.LatLng(point.lat, point.lng)));
+        mapRef.current.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+      }
+    } catch (error) {
+      setImportedPoints([]);
+      setImportMessage(error instanceof Error ? error.message : "파일을 읽지 못했습니다.");
+    }
+  }
+
   function hideConstruction() {
     if (lineRef.current) lineRef.current.setMap(null);
     vertexMarkers.current.forEach((m) => m.setMap(null));
@@ -278,6 +326,8 @@ export default function Home() {
       testMarker.current = null;
     }
     setPath([]);
+    setImportedPoints([]);
+    setImportMessage("");
     setSamples([]);
     setSubPoints([]);
     setTotal(0);
@@ -315,8 +365,9 @@ export default function Home() {
       <section className="workspace">
         <aside className="panel">
           <div className="modeSwitch" role="group" aria-label="지도 클릭 모드">
-            <button className={mode === "draw" ? "active" : ""} onClick={() => setMode("draw")}>경로 그리기</button>
             <button className={mode === "test" ? "active test" : ""} onClick={() => setMode("test")}>테스트 위치 확인</button>
+            <button className={mode === "draw" ? "active" : ""} onClick={() => setMode("draw")}>경로 그리기</button>
+            <button className={mode === "import" ? "active import" : ""} onClick={() => setMode("import")}>파일 불러와서 그리기</button>
           </div>
           {mode === "test" && <div className="testPanel">
             <b>확인할 지점을 클릭하세요</b>
@@ -326,12 +377,18 @@ export default function Home() {
               return <><p>위도 <strong>{testPoint.lat.toFixed(7)}</strong></p><p>경도 <strong>{testPoint.lng.toFixed(7)}</strong></p><div className="utmDivider" /><p>UTM Zone <strong>{utm.zone}</strong></p><p>UTM N <strong>{utm.northing.toFixed(3)} m</strong></p><p>UTM E <strong>{utm.easting.toFixed(3)} m</strong></p><div className="utmDivider" /><p>국내 중부원점 <strong>EPSG:5186</strong></p><p>N (Northing) <strong>{korea.northing.toFixed(3)} m</strong></p><p>E (Easting) <strong>{korea.easting.toFixed(3)} m</strong></p></>;
             })() : <p>클릭한 한 점의 위경도와 UTM 좌표가 여기에 표시됩니다.</p>}
           </div>}
-          <div className="step"><span>1</span><div><b>경로 그리기</b><p>지도에서 시점부터 종점까지 도로를 따라 차례로 클릭하세요.</p></div></div>
-          <div className="toolbar"><button className="minor" onClick={() => setPath((p) => p.slice(0, -1))} disabled={!path.length}>마지막 점 취소</button><button className="minor danger" onClick={reset} disabled={!path.length}>전체 초기화</button></div>
+          {mode === "import" && <div className="importPanel">
+            <b>기준 좌표 CSV 불러오기</b>
+            <p>위도·경도 또는 lat·lng 열이 있는 CSV를 선택하세요. 이 도구에서 저장한 CSV는 기준점만 자동으로 읽습니다.</p>
+            <label className="fileButton">CSV 파일 선택<input type="file" accept=".csv,text/csv" onChange={(e) => importCoordinateFile(e.target.files?.[0])} /></label>
+            {importMessage && <p className={importedPoints.length ? "importSuccess" : "importError"}>{importMessage}</p>}
+          </div>}
+          <div className="step"><span>1</span><div><b>{mode === "import" ? "기준 좌표 불러오기" : "경로 그리기"}</b><p>{mode === "import" ? "파일의 좌표 순서대로 기준점과 경로를 지도에 표시합니다." : "지도에서 시점부터 종점까지 도로를 따라 차례로 클릭하세요."}</p></div></div>
+          <div className="toolbar"><button className="minor" onClick={() => setPath((p) => p.slice(0, -1))} disabled={!path.length || mode === "import"}>마지막 점 취소</button><button className="minor danger" onClick={reset} disabled={!path.length}>전체 초기화</button></div>
           <div className="step second"><span>2</span><div><b>조사 간격 설정</b><p>전체 경로의 시점부터 입력 거리마다 좌표를 계산합니다.</p></div></div>
-          <label htmlFor="interval">조사 간격</label>
+          {mode !== "import" && <><label htmlFor="interval">조사 간격</label>
           <div className="inputRow"><input id="interval" type="number" min="0.1" step="0.1" value={interval} onChange={(e) => setInterval(Number(e.target.value))} /><em>m</em></div>
-          <label className="check"><input type="checkbox" checked={includeEnd} onChange={(e) => setIncludeEnd(e.target.checked)} /> 마지막 종점 포함</label>
+          <label className="check"><input type="checkbox" checked={includeEnd} onChange={(e) => setIncludeEnd(e.target.checked)} /> 마지막 종점 포함</label></>}
           <div className="subOptions">
             <label className="check"><input type="checkbox" checked={enableSubpoints} onChange={(e) => setEnableSubpoints(e.target.checked)} /> 도로 직각 서브포인트 생성</label>
             {enableSubpoints && <div className="subOptionGrid">
@@ -346,7 +403,7 @@ export default function Home() {
             <label className="check"><input type="checkbox" checked={showCadastral} onChange={(e) => setShowCadastral(e.target.checked)} disabled={!ready} /> 지적편집도 표시</label>
             <label className="check"><input type="checkbox" checked={showTraffic} onChange={(e) => setShowTraffic(e.target.checked)} disabled={!ready} /> 교통정보 표시</label>
           </div>
-          <button onClick={calculate} disabled={path.length < 2 || interval <= 0}>조사 위치 계산</button>
+          <button onClick={calculate} disabled={(mode === "import" ? importedPoints.length : path.length) < 2 || (mode !== "import" && interval <= 0)}>{mode === "import" ? "불러온 기준점으로 서브포인트 계산" : "조사 위치 계산"}</button>
           <button className="hideConstruction" onClick={hideConstruction} disabled={!samples.length || !constructionVisible}>폴리라인·그리기 점 숨기기</button>
           <div className="divider" />
           {!!subPoints.length && <p className="subCount">서브포인트 <strong>{subPoints.length}개</strong></p>}
