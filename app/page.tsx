@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Point = { lat: number; lng: number };
 type Sample = Point & { no: number; distance: number };
+type UtmPoint = { zone: string; easting: number; northing: number };
 
 declare global {
   interface Window { naver?: any; initNaverMap?: () => void; navermap_authFailure?: () => void }
@@ -12,6 +13,31 @@ declare global {
 
 const CLIENT_ID = "gkiaj1k1r8";
 const R = 6371008.8;
+
+function toUtm({ lat, lng }: Point): UtmPoint {
+  const a = 6378137;
+  const eccSquared = 0.00669438;
+  const k0 = 0.9996;
+  const zoneNumber = Math.floor((lng + 180) / 6) + 1;
+  const longOrigin = (zoneNumber - 1) * 6 - 180 + 3;
+  const rad = Math.PI / 180;
+  const latRad = lat * rad;
+  const longRad = lng * rad;
+  const originRad = longOrigin * rad;
+  const eccPrimeSquared = eccSquared / (1 - eccSquared);
+  const n = a / Math.sqrt(1 - eccSquared * Math.sin(latRad) ** 2);
+  const t = Math.tan(latRad) ** 2;
+  const c = eccPrimeSquared * Math.cos(latRad) ** 2;
+  const A = Math.cos(latRad) * (longRad - originRad);
+  const m = a * ((1 - eccSquared / 4 - 3 * eccSquared ** 2 / 64 - 5 * eccSquared ** 3 / 256) * latRad
+    - (3 * eccSquared / 8 + 3 * eccSquared ** 2 / 32 + 45 * eccSquared ** 3 / 1024) * Math.sin(2 * latRad)
+    + (15 * eccSquared ** 2 / 256 + 45 * eccSquared ** 3 / 1024) * Math.sin(4 * latRad)
+    - (35 * eccSquared ** 3 / 3072) * Math.sin(6 * latRad));
+  const easting = k0 * n * (A + (1 - t + c) * A ** 3 / 6 + (5 - 18 * t + t ** 2 + 72 * c - 58 * eccPrimeSquared) * A ** 5 / 120) + 500000;
+  let northing = k0 * (m + n * Math.tan(latRad) * (A ** 2 / 2 + (5 - t + 9 * c + 4 * c ** 2) * A ** 4 / 24 + (61 - 58 * t + t ** 2 + 600 * c - 330 * eccPrimeSquared) * A ** 6 / 720));
+  if (lat < 0) northing += 10000000;
+  return { zone: `${zoneNumber}${lat >= 0 ? "N" : "S"}`, easting, northing };
+}
 
 function distance(a: Point, b: Point) {
   const rad = Math.PI / 180;
@@ -173,8 +199,11 @@ export default function Home() {
   }
 
   function downloadCsv() {
-    const header = "번호,누적거리_m,위도,경도\r\n";
-    const rows = samples.map((p) => `${p.no},${p.distance.toFixed(2)},${p.lat.toFixed(7)},${p.lng.toFixed(7)}`).join("\r\n");
+    const header = "번호,누적거리_m,위도,경도,UTM_Zone,Easting_E_m,Northing_N_m\r\n";
+    const rows = samples.map((p) => {
+      const utm = toUtm(p);
+      return `${p.no},${p.distance.toFixed(2)},${p.lat.toFixed(7)},${p.lng.toFixed(7)},${utm.zone},${utm.easting.toFixed(3)},${utm.northing.toFixed(3)}`;
+    }).join("\r\n");
     const blob = new Blob(["\ufeff" + header + rows], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a");
     a.href = url; a.download = `gps-route-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
@@ -201,7 +230,10 @@ export default function Home() {
           </div>
           {mode === "test" && <div className="testPanel">
             <b>확인할 지점을 클릭하세요</b>
-            {testPoint ? <><p>위도 <strong>{testPoint.lat.toFixed(7)}</strong></p><p>경도 <strong>{testPoint.lng.toFixed(7)}</strong></p></> : <p>클릭한 한 점의 GPS 좌표가 여기에 표시됩니다.</p>}
+            {testPoint ? (() => {
+              const utm = toUtm(testPoint);
+              return <><p>위도 <strong>{testPoint.lat.toFixed(7)}</strong></p><p>경도 <strong>{testPoint.lng.toFixed(7)}</strong></p><div className="utmDivider" /><p>UTM Zone <strong>{utm.zone}</strong></p><p>N (Northing) <strong>{utm.northing.toFixed(3)} m</strong></p><p>E (Easting) <strong>{utm.easting.toFixed(3)} m</strong></p></>;
+            })() : <p>클릭한 한 점의 위경도와 UTM 좌표가 여기에 표시됩니다.</p>}
           </div>}
           <div className="step"><span>1</span><div><b>경로 그리기</b><p>지도에서 시점부터 종점까지 도로를 따라 차례로 클릭하세요.</p></div></div>
           <div className="toolbar"><button className="minor" onClick={() => setPath((p) => p.slice(0, -1))} disabled={!path.length}>마지막 점 취소</button><button className="minor danger" onClick={reset} disabled={!path.length}>전체 초기화</button></div>

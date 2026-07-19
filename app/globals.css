@@ -23,6 +23,7 @@ h1 { margin:0; font-size:25px; letter-spacing:-.04em; }
 .testPanel b { font-size:12px; color:#75500b; }
 .testPanel p { margin:6px 0 0; color:#786c54; font-size:11px; line-height:1.45; }
 .testPanel strong { float:right; color:#312a1d; font-family:monospace; font-size:12px; }
+.utmDivider { height:1px; margin:9px 0 7px; background:#ead8aa; }
 .step { display:flex; gap:12px; margin-bottom:22px; }
 .step>span { flex:0 0 27px; height:27px; display:grid; place-items:center; border-radius:50%; background:#e9fbf1; color:#00a84d; font-size:12px; font-weight:800; }
 .step b { font-size:14px; }
