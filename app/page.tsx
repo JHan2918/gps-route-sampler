@@ -7,7 +7,7 @@ type Point = { lat: number; lng: number };
 type Sample = Point & { no: number; distance: number };
 
 declare global {
-  interface Window { naver?: any }
+  interface Window { naver?: any; initNaverMap?: () => void; navermap_authFailure?: () => void }
 }
 
 const CLIENT_ID = "gkiaj1k1r8";
@@ -52,6 +52,8 @@ export default function Home() {
   const vertexMarkers = useRef<any[]>([]);
   const sampleMarkers = useRef<any[]>([]);
   const [ready, setReady] = useState(false);
+  const [scriptEnabled, setScriptEnabled] = useState(false);
+  const [mapError, setMapError] = useState("");
   const [path, setPath] = useState<Point[]>([]);
   const [interval, setInterval] = useState(5);
   const [includeEnd, setIncludeEnd] = useState(true);
@@ -76,8 +78,22 @@ export default function Home() {
       setPath((prev) => [...prev, { lat: e.coord.lat(), lng: e.coord.lng() }]);
       setSamples([]);
     });
-    setReady(true);
+    n.Event.once(map, "idle", () => setReady(true));
+    requestAnimationFrame(() => n.Event.trigger(map, "resize"));
   }, []);
+
+  useEffect(() => {
+    window.initNaverMap = initMap;
+    window.navermap_authFailure = () => {
+      setReady(false);
+      setMapError("네이버 지도 인증에 실패했습니다. Client ID와 Web 서비스 URL을 확인해 주세요.");
+    };
+    setScriptEnabled(true);
+    return () => {
+      delete window.initNaverMap;
+      delete window.navermap_authFailure;
+    };
+  }, [initMap]);
 
   useEffect(() => {
     const n = window.naver?.maps;
@@ -119,10 +135,15 @@ export default function Home() {
 
   return (
     <main>
-      <Script src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${CLIENT_ID}`} strategy="afterInteractive" onLoad={initMap} />
+      {scriptEnabled && <Script
+        id="naver-map-sdk"
+        src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${CLIENT_ID}&callback=initNaverMap`}
+        strategy="afterInteractive"
+        onError={() => setMapError("네이버 지도 파일을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.")}
+      />}
       <header className="topbar">
         <div><p className="eyebrow">FIELD ROUTE SAMPLER</p><h1>GPS 경로 좌표 도구</h1></div>
-        <span className={`status ${ready ? "online" : ""}`}><i />{ready ? "네이버 지도 연결됨" : "지도 불러오는 중"}</span>
+        <span className={`status ${ready ? "online" : mapError ? "failed" : ""}`}><i />{ready ? "네이버 지도 연결됨" : mapError ? "지도 연결 실패" : "지도 불러오는 중"}</span>
       </header>
       <section className="workspace">
         <aside className="panel">
@@ -137,7 +158,7 @@ export default function Home() {
           <dl><div><dt>경로 꼭짓점</dt><dd>{path.length}개</dd></div><div><dt>전체 경로</dt><dd>{total ? total.toFixed(2) : "—"} m</dd></div><div><dt>조사 위치</dt><dd>{samples.length || "—"}개</dd></div></dl>
           <button className="secondary" onClick={downloadCsv} disabled={!samples.length}>CSV 다운로드</button>
         </aside>
-        <div className="mapShell"><div ref={mapNode} className="map" />{!ready && <div className="mapNotice"><h2>네이버 지도를 불러오는 중입니다</h2><p>잠시만 기다려 주세요.</p></div>}<div className="mapBadge">지도를 클릭해 경로를 그리세요</div></div>
+        <div className="mapShell"><div ref={mapNode} className="map" />{!ready && <div className={`mapNotice ${mapError ? "error" : ""}`}><h2>{mapError ? "지도를 표시할 수 없습니다" : "네이버 지도를 불러오는 중입니다"}</h2><p>{mapError || "잠시만 기다려 주세요."}</p></div>}<div className="mapBadge">지도를 클릭해 경로를 그리세요</div></div>
       </section>
     </main>
   );
