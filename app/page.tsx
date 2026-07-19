@@ -51,6 +51,8 @@ export default function Home() {
   const clickRef = useRef<any>(null);
   const vertexMarkers = useRef<any[]>([]);
   const sampleMarkers = useRef<any[]>([]);
+  const testMarker = useRef<any>(null);
+  const modeRef = useRef<"draw" | "test">("draw");
   const cadastralLayer = useRef<any>(null);
   const trafficLayer = useRef<any>(null);
   const [ready, setReady] = useState(false);
@@ -61,6 +63,8 @@ export default function Home() {
   const [includeEnd, setIncludeEnd] = useState(true);
   const [showCadastral, setShowCadastral] = useState(false);
   const [showTraffic, setShowTraffic] = useState(false);
+  const [mode, setMode] = useState<"draw" | "test">("draw");
+  const [testPoint, setTestPoint] = useState<Point | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
   const [total, setTotal] = useState(0);
 
@@ -83,6 +87,16 @@ export default function Home() {
     cadastralLayer.current = new n.CadastralLayer();
     trafficLayer.current = new n.TrafficLayer();
     clickRef.current = n.Event.addListener(map, "click", (e: any) => {
+      if (modeRef.current === "test") {
+        const point = { lat: e.coord.lat(), lng: e.coord.lng() };
+        setTestPoint(point);
+        if (testMarker.current) testMarker.current.setMap(null);
+        testMarker.current = new n.Marker({
+          map, position: e.coord, zIndex: 200,
+          icon: { content: '<div class="test-marker">확인</div>', anchor: new n.Point(24, 38) },
+        });
+        return;
+      }
       setPath((prev) => [...prev, { lat: e.coord.lat(), lng: e.coord.lng() }]);
       setSamples([]);
     });
@@ -110,6 +124,10 @@ export default function Home() {
   useEffect(() => {
     if (trafficLayer.current) trafficLayer.current.setMap(showTraffic ? mapRef.current : null);
   }, [showTraffic, ready]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     const n = window.naver?.maps;
@@ -164,6 +182,14 @@ export default function Home() {
       </header>
       <section className="workspace">
         <aside className="panel">
+          <div className="modeSwitch" role="group" aria-label="지도 클릭 모드">
+            <button className={mode === "draw" ? "active" : ""} onClick={() => setMode("draw")}>경로 그리기</button>
+            <button className={mode === "test" ? "active test" : ""} onClick={() => setMode("test")}>테스트 위치 확인</button>
+          </div>
+          {mode === "test" && <div className="testPanel">
+            <b>확인할 지점을 클릭하세요</b>
+            {testPoint ? <><p>위도 <strong>{testPoint.lat.toFixed(7)}</strong></p><p>경도 <strong>{testPoint.lng.toFixed(7)}</strong></p></> : <p>클릭한 한 점의 GPS 좌표가 여기에 표시됩니다.</p>}
+          </div>}
           <div className="step"><span>1</span><div><b>경로 그리기</b><p>지도에서 시점부터 종점까지 도로를 따라 차례로 클릭하세요.</p></div></div>
           <div className="toolbar"><button className="minor" onClick={() => setPath((p) => p.slice(0, -1))} disabled={!path.length}>마지막 점 취소</button><button className="minor danger" onClick={reset} disabled={!path.length}>전체 초기화</button></div>
           <div className="step second"><span>2</span><div><b>조사 간격 설정</b><p>전체 경로의 시점부터 입력 거리마다 좌표를 계산합니다.</p></div></div>
