@@ -31,6 +31,10 @@ button:disabled { background:#dbe4df; color:#829089; cursor:not-allowed; }
 .second { margin-top:6px; margin-bottom:6px; }
 .check { display:flex; align-items:center; gap:8px; margin:11px 0 4px; color:var(--muted); font-weight:500; cursor:pointer; }
 .check input { width:15px; height:15px; padding:0; accent-color:var(--green); }
+.layerBox { margin:14px 0 2px; padding:13px; border:1px solid var(--line); border-radius:10px; background:#f8faf9; }
+.layerBox>b { display:block; font-size:12px; }
+.layerBox>p { margin:5px 0 9px; color:var(--muted); font-size:10px; line-height:1.45; }
+.layerBox .check { margin:7px 0; }
 .divider { height:1px; background:var(--line); margin:25px 0 16px; }
 dl { margin:0; }
 dl div { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; }

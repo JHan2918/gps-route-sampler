@@ -51,12 +51,16 @@ export default function Home() {
   const clickRef = useRef<any>(null);
   const vertexMarkers = useRef<any[]>([]);
   const sampleMarkers = useRef<any[]>([]);
+  const cadastralLayer = useRef<any>(null);
+  const trafficLayer = useRef<any>(null);
   const [ready, setReady] = useState(false);
   const [scriptEnabled, setScriptEnabled] = useState(false);
   const [mapError, setMapError] = useState("");
   const [path, setPath] = useState<Point[]>([]);
   const [interval, setInterval] = useState(5);
   const [includeEnd, setIncludeEnd] = useState(true);
+  const [showCadastral, setShowCadastral] = useState(false);
+  const [showTraffic, setShowTraffic] = useState(false);
   const [samples, setSamples] = useState<Sample[]>([]);
   const [total, setTotal] = useState(0);
 
@@ -70,10 +74,14 @@ export default function Home() {
     const n = window.naver.maps;
     const map = new n.Map(mapNode.current, {
       center: new n.LatLng(37.5666103, 126.9783882), zoom: 16,
+      mapTypeControl: true,
+      mapTypeControlOptions: { style: n.MapTypeControlStyle.DROPDOWN, position: n.Position.TOP_LEFT },
       zoomControl: true, zoomControlOptions: { position: n.Position.TOP_RIGHT },
     });
     mapRef.current = map;
     lineRef.current = new n.Polyline({ map, path: [], strokeColor: "#03c75a", strokeWeight: 5, strokeOpacity: 0.9 });
+    cadastralLayer.current = new n.CadastralLayer();
+    trafficLayer.current = new n.TrafficLayer();
     clickRef.current = n.Event.addListener(map, "click", (e: any) => {
       setPath((prev) => [...prev, { lat: e.coord.lat(), lng: e.coord.lng() }]);
       setSamples([]);
@@ -94,6 +102,14 @@ export default function Home() {
       delete window.navermap_authFailure;
     };
   }, [initMap]);
+
+  useEffect(() => {
+    if (cadastralLayer.current) cadastralLayer.current.setMap(showCadastral ? mapRef.current : null);
+  }, [showCadastral, ready]);
+
+  useEffect(() => {
+    if (trafficLayer.current) trafficLayer.current.setMap(showTraffic ? mapRef.current : null);
+  }, [showTraffic, ready]);
 
   useEffect(() => {
     const n = window.naver?.maps;
@@ -154,6 +170,12 @@ export default function Home() {
           <label htmlFor="interval">조사 간격</label>
           <div className="inputRow"><input id="interval" type="number" min="0.1" step="0.1" value={interval} onChange={(e) => setInterval(Number(e.target.value))} /><em>m</em></div>
           <label className="check"><input type="checkbox" checked={includeEnd} onChange={(e) => setIncludeEnd(e.target.checked)} /> 마지막 종점 포함</label>
+          <div className="layerBox">
+            <b>지도 레이어</b>
+            <p>지도 왼쪽 위 메뉴에서 일반·위성·지형을 전환할 수 있습니다.</p>
+            <label className="check"><input type="checkbox" checked={showCadastral} onChange={(e) => setShowCadastral(e.target.checked)} disabled={!ready} /> 지적편집도 표시</label>
+            <label className="check"><input type="checkbox" checked={showTraffic} onChange={(e) => setShowTraffic(e.target.checked)} disabled={!ready} /> 교통정보 표시</label>
+          </div>
           <button onClick={calculate} disabled={path.length < 2 || interval <= 0}>조사 위치 계산</button>
           <div className="divider" />
           <dl><div><dt>경로 꼭짓점</dt><dd>{path.length}개</dd></div><div><dt>전체 경로</dt><dd>{total ? total.toFixed(2) : "—"} m</dd></div><div><dt>조사 위치</dt><dd>{samples.length || "—"}개</dd></div></dl>
