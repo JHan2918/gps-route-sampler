@@ -157,7 +157,20 @@ export default function Home() {
     }));
   }
 
-  function reset() { setPath([]); clearSampleMarkers(); }
+  function reset() {
+    if (lineRef.current) lineRef.current.setPath([]);
+    vertexMarkers.current.forEach((m) => m.setMap(null));
+    vertexMarkers.current = [];
+    clearSampleMarkers();
+    if (testMarker.current) {
+      testMarker.current.setMap(null);
+      testMarker.current = null;
+    }
+    setPath([]);
+    setSamples([]);
+    setTotal(0);
+    setTestPoint(null);
+  }
 
   function downloadCsv() {
     const header = "번호,누적거리_m,위도,경도\r\n";
