@@ -78,7 +78,7 @@ export default function Home() {
       setPath((prev) => [...prev, { lat: e.coord.lat(), lng: e.coord.lng() }]);
       setSamples([]);
     });
-    n.Event.once(map, "idle", () => setReady(true));
+    n.Event.addListener(map, "idle", () => setReady(true));
     requestAnimationFrame(() => n.Event.trigger(map, "resize"));
   }, []);
 
@@ -137,8 +137,9 @@ export default function Home() {
     <main>
       {scriptEnabled && <Script
         id="naver-map-sdk"
-        src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${CLIENT_ID}&callback=initNaverMap`}
+        src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${CLIENT_ID}`}
         strategy="afterInteractive"
+        onLoad={initMap}
         onError={() => setMapError("네이버 지도 파일을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.")}
       />}
       <header className="topbar">
