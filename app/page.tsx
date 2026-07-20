@@ -133,6 +133,7 @@ function samplesFromPoints(points: (Point & { name?: string })[]): { samples: Sa
 
 export default function Home() {
   const mapNode = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mapRef = useRef<any>(null);
   const lineRef = useRef<any>(null);
   const clickRef = useRef<any>(null);
@@ -359,7 +360,11 @@ export default function Home() {
   }
 
   function reset() {
-    if (lineRef.current) lineRef.current.setPath([]);
+    const n = window.naver?.maps;
+    if (lineRef.current) {
+      lineRef.current.setMap(null);
+      lineRef.current = null;
+    }
     vertexMarkers.current.forEach((m) => m.setMap(null));
     vertexMarkers.current = [];
     clearSampleMarkers();
@@ -368,6 +373,9 @@ export default function Home() {
       testMarker.current.setMap(null);
       testMarker.current = null;
     }
+    if (cadastralLayer.current) cadastralLayer.current.setMap(null);
+    if (trafficLayer.current) trafficLayer.current.setMap(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setPath([]);
     setImportedPoints([]);
     setImportedFileSubPoints([]);
@@ -376,6 +384,14 @@ export default function Home() {
     setSubPoints([]);
     setTotal(0);
     setTestPoint(null);
+    setShowCadastral(false);
+    setShowTraffic(false);
+    setConstructionVisible(true);
+    if (n && mapRef.current) {
+      lineRef.current = new n.Polyline({
+        map: mapRef.current, path: [], strokeColor: "#03c75a", strokeWeight: 5, strokeOpacity: 0.9,
+      });
+    }
   }
 
   function downloadCsv() {
@@ -424,7 +440,7 @@ export default function Home() {
           {mode === "import" && <div className="importPanel">
             <b>기준 좌표 CSV 불러오기</b>
             <p>위도·경도 또는 lat·lng 열이 있는 CSV를 선택하세요. 이 도구에서 저장한 CSV는 기준점만 자동으로 읽습니다.</p>
-            <label className="fileButton">CSV 파일 선택<input type="file" accept=".csv,text/csv" onChange={(e) => importCoordinateFile(e.target.files?.[0])} /></label>
+            <label className="fileButton">CSV 파일 선택<input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={(e) => importCoordinateFile(e.target.files?.[0])} /></label>
             {importMessage && <p className={importedPoints.length ? "importSuccess" : "importError"}>{importMessage}</p>}
           </div>}
           <div className="step"><span>1</span><div><b>{mode === "import" ? "기준 좌표 불러오기" : "경로 그리기"}</b><p>{mode === "import" ? "파일의 좌표 순서대로 기준점과 경로를 지도에 표시합니다." : "지도에서 시점부터 종점까지 도로를 따라 차례로 클릭하세요."}</p></div></div>
