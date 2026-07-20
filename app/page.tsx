@@ -157,6 +157,7 @@ export default function Home() {
   const [showTraffic, setShowTraffic] = useState(false);
   const [mode, setMode] = useState<WorkMode>("test");
   const [importedPoints, setImportedPoints] = useState<Point[]>([]);
+  const [importedFileSubPoints, setImportedFileSubPoints] = useState<SubPoint[]>([]);
   const [importMessage, setImportMessage] = useState("");
   const [testPoint, setTestPoint] = useState<Point | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
@@ -247,6 +248,25 @@ export default function Home() {
     setSamples([]); setSubPoints([]); setTotal(0);
   }, [path, clearSampleMarkers, clearSubMarkers]);
 
+  useEffect(() => {
+    const n = window.naver?.maps;
+    if (mode !== "import" || importedPoints.length < 2 || !n || !mapRef.current) return;
+    const result = samplesFromPoints(importedPoints);
+    clearSampleMarkers();
+    clearSubMarkers();
+    setSamples(result.samples);
+    setSubPoints(importedFileSubPoints);
+    setTotal(result.total);
+    sampleMarkers.current = result.samples.map((p) => new n.Marker({
+      map: mapRef.current, position: new n.LatLng(p.lat, p.lng), title: `t${p.no}`, zIndex: 100,
+      icon: { content: `<div class="sample-marker" title="t${p.no}">t${p.no}</div>`, anchor: new n.Point(15, 15) },
+    }));
+    subMarkers.current = importedFileSubPoints.map((p) => new n.Marker({
+      map: mapRef.current, position: new n.LatLng(p.lat, p.lng), title: p.name, zIndex: 90,
+      icon: { content: `<div class="sub-marker" title="${p.name}"></div>`, anchor: new n.Point(6, 6) },
+    }));
+  }, [mode, importedPoints, importedFileSubPoints, ready, clearSampleMarkers, clearSubMarkers]);
+
   useEffect(() => () => {
     if (clickRef.current && window.naver?.maps) window.naver.maps.Event.removeListener(clickRef.current);
   }, []);
@@ -260,7 +280,7 @@ export default function Home() {
       map: mapRef.current, position: new n.LatLng(p.lat, p.lng),
       title: `t${p.no}`, zIndex: 100, icon: { content: `<div class="sample-marker" title="t${p.no}">t${p.no}</div>`, anchor: new n.Point(15, 15) },
     }));
-    const generated: SubPoint[] = [];
+    const generated: SubPoint[] = mode === "import" && !enableSubpoints ? [...importedFileSubPoints] : [];
     if (enableSubpoints && subSpacing > 0 && subCount > 0) {
       result.samples.forEach((p) => {
         for (let i = 1; i <= Math.floor(subCount); i++) {
@@ -287,23 +307,41 @@ export default function Home() {
       const latIndex = findColumn(["위도", "latitude", "lat", "y"]);
       const lngIndex = findColumn(["경도", "longitude", "lng", "lon", "long", "x"]);
       const kindIndex = findColumn(["구분", "type", "kind"]);
+      const nameIndex = findColumn(["이름", "name", "번호"]);
+      const parentIndex = findColumn(["기준점", "parent"]);
+      const distanceIndex = findColumn(["진행거리_m", "누적거리_m", "distance"]);
+      const sideIndex = findColumn(["직각방향", "side"]);
+      const offsetIndex = findColumn(["직각거리_m", "offset"]);
       if (latIndex < 0 || lngIndex < 0) throw new Error("'위도/경도' 또는 'lat/lng' 열을 찾을 수 없습니다.");
-      const points = lines.slice(1).map((line) => line.split(",").map((value) => value.trim().replace(/^"|"$/g, "")))
-        .filter((cols) => kindIndex < 0 || !cols[kindIndex] || cols[kindIndex] === "기준점")
-        .map((cols) => ({ lat: Number(cols[latIndex]), lng: Number(cols[lngIndex]) }))
-        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180);
+      const rows = lines.slice(1).map((line) => line.split(",").map((value) => value.trim().replace(/^"|"$/g, "")))
+        .map((cols) => ({ cols, lat: Number(cols[latIndex]), lng: Number(cols[lngIndex]) }))
+        .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng) && Math.abs(row.lat) <= 90 && Math.abs(row.lng) <= 180);
+      const baseRows = rows.filter(({ cols }) => kindIndex < 0 || !cols[kindIndex] || cols[kindIndex] === "기준점");
+      const points = baseRows.map(({ lat, lng }) => ({ lat, lng }));
+      const loadedSubPoints: SubPoint[] = rows
+        .filter(({ cols }) => kindIndex >= 0 && cols[kindIndex] === "서브포인트")
+        .map(({ cols, lat, lng }, index) => ({
+          lat, lng,
+          name: nameIndex >= 0 && cols[nameIndex] ? cols[nameIndex] : `sub-${index + 1}`,
+          parent: parentIndex >= 0 && cols[parentIndex] ? cols[parentIndex] : "",
+          distance: distanceIndex >= 0 && Number.isFinite(Number(cols[distanceIndex])) ? Number(cols[distanceIndex]) : 0,
+          offset: offsetIndex >= 0 && Number.isFinite(Number(cols[offsetIndex])) ? Number(cols[offsetIndex]) : 0,
+          side: sideIndex >= 0 && (cols[sideIndex] === "오른쪽" || cols[sideIndex].toLowerCase() === "right") ? "right" : "left",
+        }));
       if (points.length < 2) throw new Error("유효한 기준 좌표가 2개 이상 필요합니다.");
       setImportedPoints(points);
+      setImportedFileSubPoints(loadedSubPoints);
       setPath(points);
-      setImportMessage(`${file.name}: 기준 좌표 ${points.length}개를 불러왔습니다.`);
+      setImportMessage(`${file.name}: 기준점 ${points.length}개, 서브포인트 ${loadedSubPoints.length}개를 불러왔습니다.`);
       const n = window.naver?.maps;
       if (n && mapRef.current) {
         const bounds = new n.LatLngBounds();
-        points.forEach((point) => bounds.extend(new n.LatLng(point.lat, point.lng)));
+        [...points, ...loadedSubPoints].forEach((point) => bounds.extend(new n.LatLng(point.lat, point.lng)));
         mapRef.current.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
       }
     } catch (error) {
       setImportedPoints([]);
+      setImportedFileSubPoints([]);
       setImportMessage(error instanceof Error ? error.message : "파일을 읽지 못했습니다.");
     }
   }
@@ -327,6 +365,7 @@ export default function Home() {
     }
     setPath([]);
     setImportedPoints([]);
+    setImportedFileSubPoints([]);
     setImportMessage("");
     setSamples([]);
     setSubPoints([]);
