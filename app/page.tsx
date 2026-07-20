@@ -4,7 +4,8 @@ import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Point = { lat: number; lng: number };
-type Sample = Point & { no: number; distance: number; bearing: number };
+type Sample = Point & { no: number; distance: number; bearing: number; name?: string };
+type ImportedPoint = Point & { name: string };
 type SubPoint = Point & { name: string; parent: string; distance: number; offset: number; side: "left" | "right" };
 type UtmPoint = { zone: string; easting: number; northing: number };
 type KoreaTmPoint = { easting: number; northing: number };
@@ -99,7 +100,7 @@ function destination(point: Point, bearingDegrees: number, meters: number): Poin
   return { lat: p2 / rad, lng: ((l2 / rad + 540) % 360) - 180 };
 }
 
-function createSamples(path: Point[], interval: number, includeEnd: boolean) {
+function createSamples(path: Point[], interval: number, includeEnd: boolean): { samples: Sample[]; total: number } {
   if (path.length < 2 || interval <= 0) return { samples: [] as Sample[], total: 0 };
   const lengths = path.slice(1).map((p, i) => distance(path[i], p));
   const total = lengths.reduce((a, b) => a + b, 0);
@@ -118,14 +119,14 @@ function createSamples(path: Point[], interval: number, includeEnd: boolean) {
   return { samples, total };
 }
 
-function samplesFromPoints(points: Point[]): { samples: Sample[]; total: number } {
+function samplesFromPoints(points: (Point & { name?: string })[]): { samples: Sample[]; total: number } {
   let total = 0;
   const samples = points.map((point, index) => {
     if (index > 0) total += distance(points[index - 1], point);
     const direction = index < points.length - 1
       ? bearing(point, points[index + 1])
       : index > 0 ? bearing(points[index - 1], point) : 0;
-    return { ...point, no: index + 1, distance: total, bearing: direction };
+    return { ...point, no: index + 1, distance: total, bearing: direction, name: point.name };
   });
   return { samples, total };
 }
@@ -156,7 +157,7 @@ export default function Home() {
   const [showCadastral, setShowCadastral] = useState(false);
   const [showTraffic, setShowTraffic] = useState(false);
   const [mode, setMode] = useState<WorkMode>("test");
-  const [importedPoints, setImportedPoints] = useState<Point[]>([]);
+  const [importedPoints, setImportedPoints] = useState<ImportedPoint[]>([]);
   const [importedFileSubPoints, setImportedFileSubPoints] = useState<SubPoint[]>([]);
   const [importMessage, setImportMessage] = useState("");
   const [testPoint, setTestPoint] = useState<Point | null>(null);
@@ -258,8 +259,8 @@ export default function Home() {
     setSubPoints(importedFileSubPoints);
     setTotal(result.total);
     sampleMarkers.current = result.samples.map((p) => new n.Marker({
-      map: mapRef.current, position: new n.LatLng(p.lat, p.lng), title: `t${p.no}`, zIndex: 100,
-      icon: { content: `<div class="sample-marker" title="t${p.no}">t${p.no}</div>`, anchor: new n.Point(15, 15) },
+      map: mapRef.current, position: new n.LatLng(p.lat, p.lng), title: p.name || `t${p.no}`, zIndex: 100,
+      icon: { content: `<div class="sample-marker" title="${p.name || `t${p.no}`}">${p.name || `t${p.no}`}</div>`, anchor: new n.Point(15, 15) },
     }));
     subMarkers.current = importedFileSubPoints.map((p) => new n.Marker({
       map: mapRef.current, position: new n.LatLng(p.lat, p.lng), title: p.name, zIndex: 90,
@@ -278,14 +279,15 @@ export default function Home() {
     const n = window.naver.maps;
     sampleMarkers.current = result.samples.map((p) => new n.Marker({
       map: mapRef.current, position: new n.LatLng(p.lat, p.lng),
-      title: `t${p.no}`, zIndex: 100, icon: { content: `<div class="sample-marker" title="t${p.no}">t${p.no}</div>`, anchor: new n.Point(15, 15) },
+      title: p.name || `t${p.no}`, zIndex: 100, icon: { content: `<div class="sample-marker" title="${p.name || `t${p.no}`}">${p.name || `t${p.no}`}</div>`, anchor: new n.Point(15, 15) },
     }));
     const generated: SubPoint[] = mode === "import" && !enableSubpoints ? [...importedFileSubPoints] : [];
     if (enableSubpoints && subSpacing > 0 && subCount > 0) {
       result.samples.forEach((p) => {
         for (let i = 1; i <= Math.floor(subCount); i++) {
-          const name = `t${p.no}-${i}`;
-          generated.push({ ...destination(p, p.bearing + (subSide === "right" ? 90 : -90), subSpacing * i), name, parent: `t${p.no}`, distance: p.distance, offset: subSpacing * i, side: subSide });
+          const parent = p.name || `t${p.no}`;
+          const name = `${parent}-${i}`;
+          generated.push({ ...destination(p, p.bearing + (subSide === "right" ? 90 : -90), subSpacing * i), name, parent, distance: p.distance, offset: subSpacing * i, side: subSide });
         }
       });
     }
@@ -317,7 +319,10 @@ export default function Home() {
         .map((cols) => ({ cols, lat: Number(cols[latIndex]), lng: Number(cols[lngIndex]) }))
         .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng) && Math.abs(row.lat) <= 90 && Math.abs(row.lng) <= 180);
       const baseRows = rows.filter(({ cols }) => kindIndex < 0 || !cols[kindIndex] || cols[kindIndex] === "기준점");
-      const points = baseRows.map(({ lat, lng }) => ({ lat, lng }));
+      const points = baseRows.map(({ cols, lat, lng }, index) => ({
+        lat, lng,
+        name: nameIndex >= 0 && cols[nameIndex] ? cols[nameIndex] : `t${index + 1}`,
+      }));
       const loadedSubPoints: SubPoint[] = rows
         .filter(({ cols }) => kindIndex >= 0 && cols[kindIndex] === "서브포인트")
         .map(({ cols, lat, lng }, index) => ({
@@ -376,7 +381,7 @@ export default function Home() {
   function downloadCsv() {
     const header = "번호,누적거리_m,위도,경도,UTM_Zone,UTM_E_m,UTM_N_m,EPSG5186_E_m,EPSG5186_N_m\r\n";
     const csvHeader = "이름,구분,기준점,진행거리_m,직각방향,직각거리_m,위도,경도,UTM_Zone,UTM_E_m,UTM_N_m,EPSG5186_E_m,EPSG5186_N_m\r\n";
-    const baseRows = samples.map((p) => ({ ...p, name: `t${p.no}`, parent: `t${p.no}`, kind: "기준점", side: "" as const, offset: 0 }));
+    const baseRows = samples.map((p) => ({ ...p, name: p.name || `t${p.no}`, parent: p.name || `t${p.no}`, kind: "기준점", side: "" as const, offset: 0 }));
     const rows = [...baseRows, ...subPoints.map((p) => ({ ...p, kind: "서브포인트" }))].map((p) => {
       const utm = toUtm(p);
       const korea = toKoreaCentral(p);
