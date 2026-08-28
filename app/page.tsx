@@ -3,7 +3,7 @@
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Point = { lat: number; lng: number };
+type Point = { lat: number; lng: number; z?: number };
 type Sample = Point & { no: number; distance: number; bearing: number; name?: string };
 type ImportedPoint = Point & { name: string };
 type SubPoint = Point & { name: string; parent: string; distance: number; offset: number; side: "left" | "right" };
@@ -71,6 +71,29 @@ function toKoreaCentral({ lat, lng }: Point): KoreaTmPoint {
   const easting = 200000 + k0 * n * (A + (1 - t + c) * A ** 3 / 6 + (5 - 18 * t + t ** 2 + 72 * c - 58 * ep2) * A ** 5 / 120);
   const northing = 600000 + k0 * (m + n * tanPhi * (A ** 2 / 2 + (5 - t + 9 * c + 4 * c ** 2) * A ** 4 / 24 + (61 - 58 * t + t ** 2 + 600 * c - 330 * ep2) * A ** 6 / 720));
   return { easting, northing };
+}
+
+function fromKoreaCentral(easting: number, northing: number): Point {
+  let lat = 38 + (northing - 600000) / 111000;
+  let lng = 127 + (easting - 200000) / (111000 * Math.cos(lat * Math.PI / 180));
+  const delta = 0.000001;
+  for (let i = 0; i < 8; i++) {
+    const current = toKoreaCentral({ lat, lng });
+    const latStep = toKoreaCentral({ lat: lat + delta, lng });
+    const lngStep = toKoreaCentral({ lat, lng: lng + delta });
+    const de = easting - current.easting;
+    const dn = northing - current.northing;
+    const a = (latStep.easting - current.easting) / delta;
+    const b = (lngStep.easting - current.easting) / delta;
+    const c = (latStep.northing - current.northing) / delta;
+    const d = (lngStep.northing - current.northing) / delta;
+    const determinant = a * d - b * c;
+    if (Math.abs(determinant) < 1e-12) break;
+    lat += (de * d - b * dn) / determinant;
+    lng += (a * dn - de * c) / determinant;
+    if (Math.abs(de) < 0.0001 && Math.abs(dn) < 0.0001) break;
+  }
+  return { lat, lng };
 }
 
 function distance(a: Point, b: Point) {
@@ -309,36 +332,53 @@ export default function Home() {
       const findColumn = (names: string[]) => headers.findIndex((header) => names.includes(header));
       const latIndex = findColumn(["위도", "latitude", "lat", "y"]);
       const lngIndex = findColumn(["경도", "longitude", "lng", "lon", "long", "x"]);
+      const koreaNIndex = findColumn(["n", "northing", "epsg5186_n_m", "epsg5186_n", "국내_n", "국내좌표_n"]);
+      const koreaEIndex = findColumn(["e", "easting", "epsg5186_e_m", "epsg5186_e", "국내_e", "국내좌표_e"]);
+      const zIndex = findColumn(["z", "z_m", "높이", "고도", "elevation"]);
       const kindIndex = findColumn(["구분", "type", "kind"]);
       const nameIndex = findColumn(["이름", "name", "번호"]);
       const parentIndex = findColumn(["기준점", "parent"]);
       const distanceIndex = findColumn(["진행거리_m", "누적거리_m", "distance"]);
       const sideIndex = findColumn(["직각방향", "side"]);
       const offsetIndex = findColumn(["직각거리_m", "offset"]);
-      if (latIndex < 0 || lngIndex < 0) throw new Error("'위도/경도' 또는 'lat/lng' 열을 찾을 수 없습니다.");
+      const hasLatLng = latIndex >= 0 && lngIndex >= 0;
+      const hasKoreaCentral = koreaNIndex >= 0 && koreaEIndex >= 0;
+      if (!hasLatLng && !hasKoreaCentral) throw new Error("'위도/경도' 또는 EPSG:5186 'N/E' 열을 찾을 수 없습니다.");
       const rows = lines.slice(1).map((line) => line.split(",").map((value) => value.trim().replace(/^"|"$/g, "")))
-        .map((cols) => ({ cols, lat: Number(cols[latIndex]), lng: Number(cols[lngIndex]) }))
+        .map((cols) => {
+          const converted = hasLatLng
+            ? { lat: Number(cols[latIndex]), lng: Number(cols[lngIndex]) }
+            : fromKoreaCentral(Number(cols[koreaEIndex]), Number(cols[koreaNIndex]));
+          const z = zIndex >= 0 && Number.isFinite(Number(cols[zIndex])) ? Number(cols[zIndex]) : undefined;
+          return { cols, ...converted, z };
+        })
         .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng) && Math.abs(row.lat) <= 90 && Math.abs(row.lng) <= 180);
-      const baseRows = rows.filter(({ cols }) => kindIndex < 0 || !cols[kindIndex] || cols[kindIndex] === "기준점");
-      const points = baseRows.map(({ cols, lat, lng }, index) => ({
-        lat, lng,
+      const isNamedSubPoint = (cols: string[]) => nameIndex >= 0 && /^(.+?)[_-](\d+)$/.test(cols[nameIndex] || "");
+      const baseRows = rows.filter(({ cols }) => kindIndex >= 0
+        ? !cols[kindIndex] || cols[kindIndex] === "기준점"
+        : !isNamedSubPoint(cols));
+      const points = baseRows.map(({ cols, lat, lng, z }, index) => ({
+        lat, lng, z,
         name: nameIndex >= 0 && cols[nameIndex] ? cols[nameIndex] : `t${index + 1}`,
       }));
       const loadedSubPoints: SubPoint[] = rows
-        .filter(({ cols }) => kindIndex >= 0 && cols[kindIndex] === "서브포인트")
-        .map(({ cols, lat, lng }, index) => ({
-          lat, lng,
-          name: nameIndex >= 0 && cols[nameIndex] ? cols[nameIndex] : `sub-${index + 1}`,
-          parent: parentIndex >= 0 && cols[parentIndex] ? cols[parentIndex] : "",
+        .filter(({ cols }) => kindIndex >= 0 ? cols[kindIndex] === "서브포인트" : isNamedSubPoint(cols))
+        .map(({ cols, lat, lng, z }, index) => {
+          const pointName = nameIndex >= 0 && cols[nameIndex] ? cols[nameIndex] : `sub-${index + 1}`;
+          const inferredParent = pointName.replace(/[_-]\d+$/, "");
+          return ({
+          lat, lng, z,
+          name: pointName,
+          parent: parentIndex >= 0 && cols[parentIndex] ? cols[parentIndex] : inferredParent,
           distance: distanceIndex >= 0 && Number.isFinite(Number(cols[distanceIndex])) ? Number(cols[distanceIndex]) : 0,
           offset: offsetIndex >= 0 && Number.isFinite(Number(cols[offsetIndex])) ? Number(cols[offsetIndex]) : 0,
           side: sideIndex >= 0 && (cols[sideIndex] === "오른쪽" || cols[sideIndex].toLowerCase() === "right") ? "right" : "left",
-        }));
+        }); });
       if (points.length < 2) throw new Error("유효한 기준 좌표가 2개 이상 필요합니다.");
       setImportedPoints(points);
       setImportedFileSubPoints(loadedSubPoints);
       setPath(points);
-      setImportMessage(`${file.name}: 기준점 ${points.length}개, 서브포인트 ${loadedSubPoints.length}개를 불러왔습니다.`);
+      setImportMessage(`${file.name}: ${hasLatLng ? "위경도" : "EPSG:5186 N/E를 위경도로 변환하여"} 기준점 ${points.length}개, 서브포인트 ${loadedSubPoints.length}개를 불러왔습니다.`);
       const n = window.naver?.maps;
       if (n && mapRef.current) {
         const bounds = new n.LatLngBounds();
@@ -395,14 +435,13 @@ export default function Home() {
   }
 
   function downloadCsv() {
-    const header = "번호,누적거리_m,위도,경도,UTM_Zone,UTM_E_m,UTM_N_m,EPSG5186_E_m,EPSG5186_N_m\r\n";
-    const csvHeader = "이름,구분,기준점,진행거리_m,직각방향,직각거리_m,위도,경도,UTM_Zone,UTM_E_m,UTM_N_m,EPSG5186_E_m,EPSG5186_N_m\r\n";
+    const csvHeader = "이름,구분,기준점,진행거리_m,직각방향,직각거리_m,위도,경도,Z_m,UTM_Zone,UTM_E_m,UTM_N_m,EPSG5186_E_m,EPSG5186_N_m\r\n";
     const baseRows = samples.map((p) => ({ ...p, name: p.name || `t${p.no}`, parent: p.name || `t${p.no}`, kind: "기준점", side: "" as const, offset: 0 }));
     const rows = [...baseRows, ...subPoints.map((p) => ({ ...p, kind: "서브포인트" }))].map((p) => {
       const utm = toUtm(p);
       const korea = toKoreaCentral(p);
       const side = p.side === "left" ? "왼쪽" : p.side === "right" ? "오른쪽" : "";
-      return `${p.name},${p.kind},${p.parent},${p.distance.toFixed(2)},${side},${p.offset.toFixed(2)},${p.lat.toFixed(7)},${p.lng.toFixed(7)},${utm.zone},${utm.easting.toFixed(3)},${utm.northing.toFixed(3)},${korea.easting.toFixed(3)},${korea.northing.toFixed(3)}`;
+      return `${p.name},${p.kind},${p.parent},${p.distance.toFixed(2)},${side},${p.offset.toFixed(2)},${p.lat.toFixed(7)},${p.lng.toFixed(7)},${p.z ?? ""},${utm.zone},${utm.easting.toFixed(3)},${utm.northing.toFixed(3)},${korea.easting.toFixed(3)},${korea.northing.toFixed(3)}`;
     }).join("\r\n");
     const blob = new Blob(["\ufeff" + csvHeader + rows], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a");
@@ -439,7 +478,7 @@ export default function Home() {
           </div>}
           {mode === "import" && <div className="importPanel">
             <b>기준 좌표 CSV 불러오기</b>
-            <p>위도·경도 또는 lat·lng 열이 있는 CSV를 선택하세요. 이 도구에서 저장한 CSV는 기준점만 자동으로 읽습니다.</p>
+            <p>위도·경도 또는 EPSG:5186의 N·E 열이 있는 CSV를 선택하세요. N·E만 있으면 위경도로 자동 변환하며 Z값과 이름도 보존합니다.</p>
             <label className="fileButton">CSV 파일 선택<input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={(e) => importCoordinateFile(e.target.files?.[0])} /></label>
             {importMessage && <p className={importedPoints.length ? "importSuccess" : "importError"}>{importMessage}</p>}
           </div>}
