@@ -89,7 +89,7 @@ h2 { margin:0 0 9px; font-size:19px; letter-spacing:-.03em; }
 .coordinateMapInfo dl div { padding:3px 0; font-size:10px; }
 .coordinateMapInfo dd { font-family:monospace; }
 .coordinateMapInfo .coordDivider { margin-top:4px; padding-top:7px; border-top:1px solid var(--line); }
-.measureMapClear { position:absolute; z-index:6; top:14px; right:54px; width:26px; height:26px; margin:0; padding:0; border:2px solid #fff; border-radius:50%; background:#f07822; color:#fff; box-shadow:0 3px 10px #0004; font:700 17px/22px Arial; }
+.measure-point-clear { width:26px; height:26px; margin:0; padding:0; border:2px solid #fff; border-radius:50%; background:#e95721; color:#fff; box-shadow:0 3px 10px #0005; font:700 17px/22px Arial; cursor:pointer; }
 .toolClear { height:31px; margin-top:9px; border:1px solid #cbd5d0; background:#fff; color:#5d6b64; font-size:10px; }
 .emptyCoord { display:block; padding:8px 0; color:#8a9690; font-size:10px; }
 .measure-label { position:relative; min-width:14px; min-height:14px; white-space:nowrap; color:#71380f; font:10px/1.4 Arial,sans-serif; }
@@ -103,4 +103,4 @@ h2 { margin:0 0 9px; font-size:19px; letter-spacing:-.03em; }
 .sub-marker:hover { width:16px; height:16px; margin:-2px; background:#e95721; }
 .test-marker { width:48px; height:30px; display:grid; place-items:center; position:relative; border:2px solid #fff; border-radius:15px; background:#f2a93b; color:#fff; box-shadow:0 3px 10px #0005; font:700 11px Arial; }
 .test-marker:after { content:""; position:absolute; bottom:-8px; left:18px; border-width:7px 5px 0; border-style:solid; border-color:#f2a93b transparent transparent; }
-@media(max-width:760px){ body{padding:12px}.topbar{height:74px}.status{display:none}.workspace{grid-template-columns:1fr}.panel{order:2}.mapShell{min-height:55vh}.quickMapTools button{width:50px}.coordinateMapInfo{bottom:8px;left:8px;width:205px}.measureMapClear{top:8px;right:50px} }
+@media(max-width:760px){ body{padding:12px}.topbar{height:74px}.status{display:none}.workspace{grid-template-columns:1fr}.panel{order:2}.mapShell{min-height:55vh}.quickMapTools button{width:50px}.coordinateMapInfo{bottom:8px;left:8px;width:205px} }

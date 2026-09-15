@@ -169,6 +169,8 @@ export default function Home() {
   const mapToolRef = useRef<MapTool>("none");
   const measureLine = useRef<any>(null);
   const measureMarkers = useRef<any[]>([]);
+  const measureClearMarker = useRef<any>(null);
+  const clearMeasurementRef = useRef<() => void>(() => {});
   const measurePoints = useRef<Point[]>([]);
   const cadastralLayer = useRef<any>(null);
   const trafficLayer = useRef<any>(null);
@@ -188,7 +190,7 @@ export default function Home() {
   const [mode, setMode] = useState<WorkMode>("test");
   const [mapTool, setMapTool] = useState<MapTool>("none");
   const [, setMeasureTotal] = useState(0);
-  const [measureCount, setMeasureCount] = useState(0);
+  const [, setMeasureCount] = useState(0);
   const [importedPoints, setImportedPoints] = useState<ImportedPoint[]>([]);
   const [importedFileSubPoints, setImportedFileSubPoints] = useState<SubPoint[]>([]);
   const [importMessage, setImportMessage] = useState("");
@@ -234,6 +236,13 @@ export default function Home() {
           map, position: e.coord, zIndex: 300,
           icon: { content: `<div class="measure-label"><i></i>${label}</div>`, anchor: new n.Point(7, 7) },
         }));
+        if (measureClearMarker.current) measureClearMarker.current.setMap(null);
+        measureClearMarker.current = new n.Marker({
+          map, position: e.coord, zIndex: 310, clickable: true,
+          title: "측정선과 거리 표시 모두 지우기",
+          icon: { content: '<button class="measure-point-clear" type="button">×</button>', anchor: new n.Point(-8, 13) },
+        });
+        n.Event.addListener(measureClearMarker.current, "click", () => clearMeasurementRef.current());
         setMeasureTotal(total);
         setMeasureCount(measurePoints.current.length);
         return;
@@ -439,13 +448,29 @@ export default function Home() {
   }
 
   function clearMeasurement() {
+    const n = window.naver?.maps;
     measureMarkers.current.forEach((marker) => marker.setMap(null));
     measureMarkers.current = [];
+    if (measureClearMarker.current) {
+      measureClearMarker.current.setMap(null);
+      measureClearMarker.current = null;
+    }
     measurePoints.current = [];
-    measureLine.current?.setPath([]);
+    if (measureLine.current) {
+      measureLine.current.setPath([]);
+      measureLine.current.setMap(null);
+      measureLine.current = null;
+    }
+    if (n && mapRef.current) {
+      measureLine.current = new n.Polyline({
+        map: mapRef.current, path: [], strokeColor: "#f07822", strokeWeight: 4, strokeOpacity: 0.95,
+      });
+    }
     setMeasureTotal(0);
     setMeasureCount(0);
   }
+
+  clearMeasurementRef.current = clearMeasurement;
 
   function selectMapTool(tool: MapTool) {
     const next = mapTool === tool ? "none" : tool;
@@ -578,7 +603,6 @@ export default function Home() {
         </aside>
         <div className="mapShell">
           <div ref={mapNode} className="map" />
-          {measureCount > 0 && <button className="measureMapClear" title="측정선과 거리 표시 모두 지우기" onClick={clearMeasurement}>×</button>}
           {ready && mapTool === "coordinate" && <div className="coordinateMapInfo">
               <b>위치 좌표</b><p>지도에서 확인할 지점을 클릭하세요.</p>
               {testPoint ? (() => {
