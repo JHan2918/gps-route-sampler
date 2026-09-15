@@ -10,6 +10,7 @@ type SubPoint = Point & { name: string; parent: string; distance: number; offset
 type UtmPoint = { zone: string; easting: number; northing: number };
 type KoreaTmPoint = { easting: number; northing: number };
 type WorkMode = "draw" | "test" | "import";
+type MapTool = "none" | "measure" | "coordinate";
 
 declare global {
   interface Window { naver?: any; initNaverMap?: () => void; navermap_authFailure?: () => void }
@@ -165,6 +166,10 @@ export default function Home() {
   const subMarkers = useRef<any[]>([]);
   const testMarker = useRef<any>(null);
   const modeRef = useRef<WorkMode>("test");
+  const mapToolRef = useRef<MapTool>("none");
+  const measureLine = useRef<any>(null);
+  const measureMarkers = useRef<any[]>([]);
+  const measurePoints = useRef<Point[]>([]);
   const cadastralLayer = useRef<any>(null);
   const trafficLayer = useRef<any>(null);
   const [ready, setReady] = useState(false);
@@ -181,6 +186,9 @@ export default function Home() {
   const [showCadastral, setShowCadastral] = useState(false);
   const [showTraffic, setShowTraffic] = useState(false);
   const [mode, setMode] = useState<WorkMode>("test");
+  const [mapTool, setMapTool] = useState<MapTool>("none");
+  const [measureTotal, setMeasureTotal] = useState(0);
+  const [measureCount, setMeasureCount] = useState(0);
   const [importedPoints, setImportedPoints] = useState<ImportedPoint[]>([]);
   const [importedFileSubPoints, setImportedFileSubPoints] = useState<SubPoint[]>([]);
   const [importMessage, setImportMessage] = useState("");
@@ -210,9 +218,36 @@ export default function Home() {
     });
     mapRef.current = map;
     lineRef.current = new n.Polyline({ map, path: [], strokeColor: "#03c75a", strokeWeight: 5, strokeOpacity: 0.9 });
+    measureLine.current = new n.Polyline({ map, path: [], strokeColor: "#f07822", strokeWeight: 4, strokeOpacity: 0.95 });
     cadastralLayer.current = new n.CadastralLayer();
     trafficLayer.current = new n.TrafficLayer();
     clickRef.current = n.Event.addListener(map, "click", (e: any) => {
+      if (mapToolRef.current === "measure") {
+        const point = { lat: e.coord.lat(), lng: e.coord.lng() };
+        const previous = measurePoints.current[measurePoints.current.length - 1];
+        const segment = previous ? distance(previous, point) : 0;
+        const total = measurePoints.current.slice(1).reduce((sum, current, index) => sum + distance(measurePoints.current[index], current), 0) + segment;
+        measurePoints.current.push(point);
+        measureLine.current?.setPath(measurePoints.current.map((p) => new n.LatLng(p.lat, p.lng)));
+        const label = previous ? `구간 ${segment.toFixed(2)} m<br><b>누적 ${total.toFixed(2)} m</b>` : "측정 시점";
+        measureMarkers.current.push(new n.Marker({
+          map, position: e.coord, zIndex: 300,
+          icon: { content: `<div class="measure-label"><i></i>${label}</div>`, anchor: new n.Point(7, 7) },
+        }));
+        setMeasureTotal(total);
+        setMeasureCount(measurePoints.current.length);
+        return;
+      }
+      if (mapToolRef.current === "coordinate") {
+        const point = { lat: e.coord.lat(), lng: e.coord.lng() };
+        setTestPoint(point);
+        if (testMarker.current) testMarker.current.setMap(null);
+        testMarker.current = new n.Marker({
+          map, position: e.coord, zIndex: 300,
+          icon: { content: '<div class="test-marker">좌표</div>', anchor: new n.Point(24, 38) },
+        });
+        return;
+      }
       if (modeRef.current === "test") {
         const point = { lat: e.coord.lat(), lng: e.coord.lng() };
         setTestPoint(point);
@@ -256,6 +291,10 @@ export default function Home() {
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+
+  useEffect(() => {
+    mapToolRef.current = mapTool;
+  }, [mapTool]);
 
   useEffect(() => {
     const n = window.naver?.maps;
@@ -399,6 +438,25 @@ export default function Home() {
     setConstructionVisible(false);
   }
 
+  function clearMeasurement() {
+    measureMarkers.current.forEach((marker) => marker.setMap(null));
+    measureMarkers.current = [];
+    measurePoints.current = [];
+    measureLine.current?.setPath([]);
+    setMeasureTotal(0);
+    setMeasureCount(0);
+  }
+
+  function selectMapTool(tool: MapTool) {
+    const next = mapTool === tool ? "none" : tool;
+    setMapTool(next);
+    if (next !== "coordinate" && mode !== "test" && testMarker.current) {
+      testMarker.current.setMap(null);
+      testMarker.current = null;
+      setTestPoint(null);
+    }
+  }
+
   function reset() {
     const n = window.naver?.maps;
     if (lineRef.current) {
@@ -409,6 +467,7 @@ export default function Home() {
     vertexMarkers.current = [];
     clearSampleMarkers();
     clearSubMarkers();
+    clearMeasurement();
     if (testMarker.current) {
       testMarker.current.setMap(null);
       testMarker.current = null;
@@ -427,6 +486,7 @@ export default function Home() {
     setShowCadastral(false);
     setShowTraffic(false);
     setConstructionVisible(true);
+    setMapTool("none");
     if (n && mapRef.current) {
       lineRef.current = new n.Polyline({
         map: mapRef.current, path: [], strokeColor: "#03c75a", strokeWeight: 5, strokeOpacity: 0.9,
@@ -509,7 +569,30 @@ export default function Home() {
           <dl><div><dt>경로 꼭짓점</dt><dd>{path.length}개</dd></div><div><dt>전체 경로</dt><dd>{total ? total.toFixed(2) : "—"} m</dd></div><div><dt>조사 위치</dt><dd>{samples.length || "—"}개</dd></div></dl>
           <button className="secondary" onClick={downloadCsv} disabled={!samples.length}>CSV 다운로드</button>
         </aside>
-        <div className="mapShell"><div ref={mapNode} className="map" />{!ready && <div className={`mapNotice ${mapError ? "error" : ""}`}><h2>{mapError ? "지도를 표시할 수 없습니다" : "네이버 지도를 불러오는 중입니다"}</h2><p>{mapError || "잠시만 기다려 주세요."}</p></div>}<div className="mapBadge">지도를 클릭해 경로를 그리세요</div></div>
+        <div className="mapShell">
+          <div ref={mapNode} className="map" />
+          {ready && <div className="mapTools">
+            <div className="mapToolButtons">
+              <button className={mapTool === "measure" ? "active measure" : ""} onClick={() => selectMapTool("measure")}>거리 측정</button>
+              <button className={mapTool === "coordinate" ? "active coordinate" : ""} onClick={() => selectMapTool("coordinate")}>좌표 확인</button>
+            </div>
+            {mapTool === "measure" && <div className="mapToolInfo">
+              <b>거리 측정</b><p>지도에서 지점을 차례로 클릭하세요.</p>
+              <dl><div><dt>측정점</dt><dd>{measureCount}개</dd></div><div><dt>누적거리</dt><dd>{measureTotal.toFixed(2)} m</dd></div></dl>
+              <button className="toolClear" onClick={clearMeasurement} disabled={!measureCount}>측정 지우기</button>
+            </div>}
+            {mapTool === "coordinate" && <div className="mapToolInfo coordinateInfo">
+              <b>위치 좌표</b><p>지도에서 확인할 지점을 클릭하세요.</p>
+              {testPoint ? (() => {
+                const korea = toKoreaCentral(testPoint);
+                return <dl><div><dt>위도</dt><dd>{testPoint.lat.toFixed(7)}</dd></div><div><dt>경도</dt><dd>{testPoint.lng.toFixed(7)}</dd></div><div className="coordDivider"><dt>EPSG:5186 N</dt><dd>{korea.northing.toFixed(3)}</dd></div><div><dt>EPSG:5186 E</dt><dd>{korea.easting.toFixed(3)}</dd></div></dl>;
+              })() : <span className="emptyCoord">아직 선택된 지점이 없습니다.</span>}
+              <button className="toolClear" onClick={() => { testMarker.current?.setMap(null); testMarker.current = null; setTestPoint(null); }} disabled={!testPoint}>좌표 지우기</button>
+            </div>}
+          </div>}
+          {!ready && <div className={`mapNotice ${mapError ? "error" : ""}`}><h2>{mapError ? "지도를 표시할 수 없습니다" : "네이버 지도를 불러오는 중입니다"}</h2><p>{mapError || "잠시만 기다려 주세요."}</p></div>}
+          <div className="mapBadge">{mapTool === "measure" ? "지점을 차례로 클릭해 거리를 측정하세요" : mapTool === "coordinate" ? "좌표를 확인할 지점을 클릭하세요" : "지도를 클릭해 경로를 그리세요"}</div>
+        </div>
       </section>
     </main>
   );
