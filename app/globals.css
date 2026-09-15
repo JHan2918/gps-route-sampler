@@ -6,6 +6,11 @@ html, body { margin:0; min-height:100%; background:var(--paper); color:var(--ink
 body { padding:22px; }
 main { max-width:1440px; margin:auto; }
 .topbar { height:86px; display:flex; align-items:center; justify-content:space-between; padding:0 4px; }
+.headerActions { display:flex; align-items:center; gap:8px; }
+.quickMapTools { display:flex; gap:4px; }
+.quickMapTools button { width:58px; height:25px; margin:0; padding:0; border:1px solid #d6dfda; border-radius:6px; background:#fff; color:#59665f; font-size:9px; font-weight:700; box-shadow:0 2px 7px #20372c0d; }
+.quickMapTools button.active.measure { border-color:#f07822; background:#f07822; color:#fff; }
+.quickMapTools button.active.coordinate { border-color:#245fa2; background:#245fa2; color:#fff; }
 .eyebrow { margin:0 0 5px; font-size:11px; font-weight:800; letter-spacing:.18em; color:var(--green); }
 h1 { margin:0; font-size:25px; letter-spacing:-.04em; }
 .status { background:#fff; border:1px solid var(--line); border-radius:999px; padding:9px 13px; font-size:12px; color:var(--muted); box-shadow:0 4px 18px #20372c0d; }
@@ -78,17 +83,13 @@ h2 { margin:0 0 9px; font-size:19px; letter-spacing:-.03em; }
 .mapNotice.error { border-color:#f2c8c2; }
 .mapNotice.error h2 { color:#b4382a; }
 .mapBadge { position:absolute; z-index:1; right:18px; bottom:18px; padding:8px 10px; border-radius:7px; background:#15231edb; color:#fff; font-size:10px; font-weight:700; letter-spacing:.08em; }
-.mapTools { position:absolute; z-index:5; top:68px; right:14px; width:245px; font-size:12px; }
-.mapToolButtons { display:grid; grid-template-columns:1fr 1fr; gap:5px; padding:5px; border:1px solid #d8e2dd; border-radius:12px; background:#ffffffed; box-shadow:0 5px 18px #13251d26; backdrop-filter:blur(5px); }
-.mapToolButtons button { height:35px; margin:0; padding:0 8px; background:#edf2ef; color:#526058; font-size:11px; }
-.mapToolButtons button.active.measure { background:#f07822; color:#fff; }
-.mapToolButtons button.active.coordinate { background:#245fa2; color:#fff; }
-.mapToolInfo { margin-top:7px; padding:14px; border:1px solid #d8e2dd; border-radius:12px; background:#ffffffed; box-shadow:0 5px 18px #13251d26; backdrop-filter:blur(5px); }
-.mapToolInfo>b { font-size:13px; }
-.mapToolInfo>p { margin:4px 0 9px; color:var(--muted); font-size:10px; line-height:1.45; }
-.mapToolInfo dl div { padding:4px 0; font-size:11px; }
-.mapToolInfo dd { font-family:monospace; }
-.mapToolInfo .coordDivider { margin-top:5px; padding-top:9px; border-top:1px solid var(--line); }
+.coordinateMapInfo { position:absolute; z-index:5; bottom:14px; left:14px; width:215px; padding:12px; border:1px solid #d8e2dd; border-radius:10px; background:#ffffffed; box-shadow:0 5px 18px #13251d26; backdrop-filter:blur(5px); font-size:11px; }
+.coordinateMapInfo>b { font-size:12px; }
+.coordinateMapInfo>p { margin:3px 0 7px; color:var(--muted); font-size:9px; }
+.coordinateMapInfo dl div { padding:3px 0; font-size:10px; }
+.coordinateMapInfo dd { font-family:monospace; }
+.coordinateMapInfo .coordDivider { margin-top:4px; padding-top:7px; border-top:1px solid var(--line); }
+.measureMapClear { position:absolute; z-index:6; top:14px; right:54px; width:26px; height:26px; margin:0; padding:0; border:2px solid #fff; border-radius:50%; background:#f07822; color:#fff; box-shadow:0 3px 10px #0004; font:700 17px/22px Arial; }
 .toolClear { height:31px; margin-top:9px; border:1px solid #cbd5d0; background:#fff; color:#5d6b64; font-size:10px; }
 .emptyCoord { display:block; padding:8px 0; color:#8a9690; font-size:10px; }
 .measure-label { position:relative; min-width:14px; min-height:14px; white-space:nowrap; color:#71380f; font:10px/1.4 Arial,sans-serif; }
@@ -102,4 +103,4 @@ h2 { margin:0 0 9px; font-size:19px; letter-spacing:-.03em; }
 .sub-marker:hover { width:16px; height:16px; margin:-2px; background:#e95721; }
 .test-marker { width:48px; height:30px; display:grid; place-items:center; position:relative; border:2px solid #fff; border-radius:15px; background:#f2a93b; color:#fff; box-shadow:0 3px 10px #0005; font:700 11px Arial; }
 .test-marker:after { content:""; position:absolute; bottom:-8px; left:18px; border-width:7px 5px 0; border-style:solid; border-color:#f2a93b transparent transparent; }
-@media(max-width:760px){ body{padding:12px}.topbar{height:74px}.status{display:none}.workspace{grid-template-columns:1fr}.panel{order:2}.mapShell{min-height:55vh}.mapTools{top:62px;right:8px;width:220px} }
+@media(max-width:760px){ body{padding:12px}.topbar{height:74px}.status{display:none}.workspace{grid-template-columns:1fr}.panel{order:2}.mapShell{min-height:55vh}.quickMapTools button{width:50px}.coordinateMapInfo{bottom:8px;left:8px;width:205px}.measureMapClear{top:8px;right:50px} }

@@ -187,7 +187,7 @@ export default function Home() {
   const [showTraffic, setShowTraffic] = useState(false);
   const [mode, setMode] = useState<WorkMode>("test");
   const [mapTool, setMapTool] = useState<MapTool>("none");
-  const [measureTotal, setMeasureTotal] = useState(0);
+  const [, setMeasureTotal] = useState(0);
   const [measureCount, setMeasureCount] = useState(0);
   const [importedPoints, setImportedPoints] = useState<ImportedPoint[]>([]);
   const [importedFileSubPoints, setImportedFileSubPoints] = useState<SubPoint[]>([]);
@@ -449,6 +449,7 @@ export default function Home() {
 
   function selectMapTool(tool: MapTool) {
     const next = mapTool === tool ? "none" : tool;
+    if (mapTool === "measure" && next !== "measure") clearMeasurement();
     setMapTool(next);
     if (next !== "coordinate" && mode !== "test" && testMarker.current) {
       testMarker.current.setMap(null);
@@ -519,7 +520,13 @@ export default function Home() {
       />}
       <header className="topbar">
         <div><p className="eyebrow">FIELD ROUTE SAMPLER</p><h1>GPS 경로 좌표 도구</h1></div>
-        <span className={`status ${ready ? "online" : mapError ? "failed" : ""}`}><i />{ready ? "네이버 지도 연결됨" : mapError ? "지도 연결 실패" : "지도 불러오는 중"}</span>
+        <div className="headerActions">
+          <div className="quickMapTools">
+            <button title="거리 측정" className={mapTool === "measure" ? "active measure" : ""} onClick={() => selectMapTool("measure")} disabled={!ready}>거리 측정</button>
+            <button title="좌표 확인" className={mapTool === "coordinate" ? "active coordinate" : ""} onClick={() => selectMapTool("coordinate")} disabled={!ready}>좌표 확인</button>
+          </div>
+          <span className={`status ${ready ? "online" : mapError ? "failed" : ""}`}><i />{ready ? "네이버 지도 연결됨" : mapError ? "지도 연결 실패" : "지도 불러오는 중"}</span>
+        </div>
       </header>
       <section className="workspace">
         <aside className="panel">
@@ -571,24 +578,14 @@ export default function Home() {
         </aside>
         <div className="mapShell">
           <div ref={mapNode} className="map" />
-          {ready && <div className="mapTools">
-            <div className="mapToolButtons">
-              <button className={mapTool === "measure" ? "active measure" : ""} onClick={() => selectMapTool("measure")}>거리 측정</button>
-              <button className={mapTool === "coordinate" ? "active coordinate" : ""} onClick={() => selectMapTool("coordinate")}>좌표 확인</button>
-            </div>
-            {mapTool === "measure" && <div className="mapToolInfo">
-              <b>거리 측정</b><p>지도에서 지점을 차례로 클릭하세요.</p>
-              <dl><div><dt>측정점</dt><dd>{measureCount}개</dd></div><div><dt>누적거리</dt><dd>{measureTotal.toFixed(2)} m</dd></div></dl>
-              <button className="toolClear" onClick={clearMeasurement} disabled={!measureCount}>측정 지우기</button>
-            </div>}
-            {mapTool === "coordinate" && <div className="mapToolInfo coordinateInfo">
+          {measureCount > 0 && <button className="measureMapClear" title="측정선과 거리 표시 모두 지우기" onClick={clearMeasurement}>×</button>}
+          {ready && mapTool === "coordinate" && <div className="coordinateMapInfo">
               <b>위치 좌표</b><p>지도에서 확인할 지점을 클릭하세요.</p>
               {testPoint ? (() => {
                 const korea = toKoreaCentral(testPoint);
                 return <dl><div><dt>위도</dt><dd>{testPoint.lat.toFixed(7)}</dd></div><div><dt>경도</dt><dd>{testPoint.lng.toFixed(7)}</dd></div><div className="coordDivider"><dt>EPSG:5186 N</dt><dd>{korea.northing.toFixed(3)}</dd></div><div><dt>EPSG:5186 E</dt><dd>{korea.easting.toFixed(3)}</dd></div></dl>;
               })() : <span className="emptyCoord">아직 선택된 지점이 없습니다.</span>}
               <button className="toolClear" onClick={() => { testMarker.current?.setMap(null); testMarker.current = null; setTestPoint(null); }} disabled={!testPoint}>좌표 지우기</button>
-            </div>}
           </div>}
           {!ready && <div className={`mapNotice ${mapError ? "error" : ""}`}><h2>{mapError ? "지도를 표시할 수 없습니다" : "네이버 지도를 불러오는 중입니다"}</h2><p>{mapError || "잠시만 기다려 주세요."}</p></div>}
           <div className="mapBadge">{mapTool === "measure" ? "지점을 차례로 클릭해 거리를 측정하세요" : mapTool === "coordinate" ? "좌표를 확인할 지점을 클릭하세요" : "지도를 클릭해 경로를 그리세요"}</div>
