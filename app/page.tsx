@@ -323,7 +323,7 @@ export default function Home() {
 
   useEffect(() => {
     const n = window.naver?.maps;
-    if (mode !== "import" || importedPoints.length < 2 || !n || !mapRef.current) return;
+    if (mode !== "import" || (!importedPoints.length && !importedFileSubPoints.length) || !n || !mapRef.current) return;
     const result = samplesFromPoints(importedPoints);
     clearSampleMarkers();
     clearSubMarkers();
@@ -382,7 +382,8 @@ export default function Home() {
       const lngIndex = findColumn(["경도", "longitude", "lng", "lon", "long", "x"]);
       const koreaNIndex = findColumn(["n", "northing", "epsg5186_n_m", "epsg5186_n", "국내_n", "국내좌표_n"]);
       const koreaEIndex = findColumn(["e", "easting", "epsg5186_e_m", "epsg5186_e", "국내_e", "국내좌표_e"]);
-      const zIndex = findColumn(["z", "z_m", "높이", "고도", "elevation"]);
+      const zIndex = findColumn(["z_m", "높이", "고도", "elevation"]);
+      const alternateZIndex = findColumn(["z"]);
       const kindIndex = findColumn(["구분", "type", "kind"]);
       const nameIndex = findColumn(["이름", "name", "번호"]);
       const parentIndex = findColumn(["기준점", "parent"]);
@@ -392,12 +393,24 @@ export default function Home() {
       const hasLatLng = latIndex >= 0 && lngIndex >= 0;
       const hasKoreaCentral = koreaNIndex >= 0 && koreaEIndex >= 0;
       if (!hasLatLng && !hasKoreaCentral) throw new Error("'위도/경도' 또는 EPSG:5186 'N/E' 열을 찾을 수 없습니다.");
+      const parseNumber = (value: string | undefined) => {
+        if (value === undefined || value.trim() === "") return undefined;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : undefined;
+      };
       const rows = lines.slice(1).map((line) => line.split(",").map((value) => value.trim().replace(/^"|"$/g, "")))
         .map((cols) => {
-          const converted = hasLatLng
-            ? { lat: Number(cols[latIndex]), lng: Number(cols[lngIndex]) }
-            : fromKoreaCentral(Number(cols[koreaEIndex]), Number(cols[koreaNIndex]));
-          const z = zIndex >= 0 && Number.isFinite(Number(cols[zIndex])) ? Number(cols[zIndex]) : undefined;
+          const latValue = hasLatLng ? parseNumber(cols[latIndex]) : undefined;
+          const lngValue = hasLatLng ? parseNumber(cols[lngIndex]) : undefined;
+          const easting = hasKoreaCentral ? parseNumber(cols[koreaEIndex]) : undefined;
+          const northing = hasKoreaCentral ? parseNumber(cols[koreaNIndex]) : undefined;
+          const converted = latValue !== undefined && lngValue !== undefined
+            ? { lat: latValue, lng: lngValue }
+            : easting !== undefined && northing !== undefined
+              ? fromKoreaCentral(easting, northing)
+              : { lat: Number.NaN, lng: Number.NaN };
+          const z = (zIndex >= 0 ? parseNumber(cols[zIndex]) : undefined)
+            ?? (alternateZIndex >= 0 ? parseNumber(cols[alternateZIndex]) : undefined);
           return { cols, ...converted, z };
         })
         .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng) && Math.abs(row.lat) <= 90 && Math.abs(row.lng) <= 180);
@@ -422,7 +435,7 @@ export default function Home() {
           offset: offsetIndex >= 0 && Number.isFinite(Number(cols[offsetIndex])) ? Number(cols[offsetIndex]) : 0,
           side: sideIndex >= 0 && (cols[sideIndex] === "오른쪽" || cols[sideIndex].toLowerCase() === "right") ? "right" : "left",
         }); });
-      if (points.length < 2) throw new Error("유효한 기준 좌표가 2개 이상 필요합니다.");
+      if (!points.length && !loadedSubPoints.length) throw new Error("표시할 수 있는 유효한 좌표가 없습니다.");
       setImportedPoints(points);
       setImportedFileSubPoints(loadedSubPoints);
       setPath(points);
@@ -599,7 +612,7 @@ export default function Home() {
           <div className="divider" />
           {!!subPoints.length && <p className="subCount">서브포인트 <strong>{subPoints.length}개</strong></p>}
           <dl><div><dt>경로 꼭짓점</dt><dd>{path.length}개</dd></div><div><dt>전체 경로</dt><dd>{total ? total.toFixed(2) : "—"} m</dd></div><div><dt>조사 위치</dt><dd>{samples.length || "—"}개</dd></div></dl>
-          <button className="secondary" onClick={downloadCsv} disabled={!samples.length}>CSV 다운로드</button>
+          <button className="secondary" onClick={downloadCsv} disabled={!samples.length && !subPoints.length}>CSV 다운로드</button>
         </aside>
         <div className="mapShell">
           <div ref={mapNode} className="map" />
