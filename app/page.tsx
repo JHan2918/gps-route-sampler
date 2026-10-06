@@ -404,10 +404,12 @@ export default function Home() {
           const lngValue = hasLatLng ? parseNumber(cols[lngIndex]) : undefined;
           const easting = hasKoreaCentral ? parseNumber(cols[koreaEIndex]) : undefined;
           const northing = hasKoreaCentral ? parseNumber(cols[koreaNIndex]) : undefined;
-          const converted = latValue !== undefined && lngValue !== undefined
-            ? { lat: latValue, lng: lngValue }
-            : easting !== undefined && northing !== undefined
-              ? fromKoreaCentral(easting, northing)
+          // 현장 작업 CSV에서는 EPSG:5186 좌표를 직접 보정하는 경우가 많으므로,
+          // 두 좌표계가 모두 있으면 EPSG:5186 값을 원본으로 사용한다.
+          const converted = easting !== undefined && northing !== undefined
+            ? fromKoreaCentral(easting, northing)
+            : latValue !== undefined && lngValue !== undefined
+              ? { lat: latValue, lng: lngValue }
               : { lat: Number.NaN, lng: Number.NaN };
           const z = (zIndex >= 0 ? parseNumber(cols[zIndex]) : undefined)
             ?? (alternateZIndex >= 0 ? parseNumber(cols[alternateZIndex]) : undefined);
@@ -436,10 +438,11 @@ export default function Home() {
           side: sideIndex >= 0 && (cols[sideIndex] === "오른쪽" || cols[sideIndex].toLowerCase() === "right") ? "right" : "left",
         }); });
       if (!points.length && !loadedSubPoints.length) throw new Error("표시할 수 있는 유효한 좌표가 없습니다.");
+      setEnableSubpoints(false);
       setImportedPoints(points);
       setImportedFileSubPoints(loadedSubPoints);
       setPath(points);
-      setImportMessage(`${file.name}: ${hasLatLng ? "위경도" : "EPSG:5186 N/E를 위경도로 변환하여"} 기준점 ${points.length}개, 서브포인트 ${loadedSubPoints.length}개를 불러왔습니다.`);
+      setImportMessage(`${file.name}: 파일 좌표를 그대로 읽었습니다. 기준점 ${points.length}개, 서브포인트 ${loadedSubPoints.length}개${hasKoreaCentral ? " (EPSG:5186 우선)" : ""}.`);
       const n = window.naver?.maps;
       if (n && mapRef.current) {
         const bounds = new n.LatLngBounds();
@@ -594,12 +597,13 @@ export default function Home() {
           <div className="inputRow"><input id="interval" type="number" min="0.1" step="0.1" value={interval} onChange={(e) => setInterval(Number(e.target.value))} /><em>m</em></div>
           <label className="check"><input type="checkbox" checked={includeEnd} onChange={(e) => setIncludeEnd(e.target.checked)} /> 마지막 종점 포함</label></>}
           <div className="subOptions">
-            <label className="check"><input type="checkbox" checked={enableSubpoints} onChange={(e) => setEnableSubpoints(e.target.checked)} /> 도로 직각 서브포인트 생성</label>
+            <label className="check"><input type="checkbox" checked={enableSubpoints} onChange={(e) => setEnableSubpoints(e.target.checked)} /> {mode === "import" ? "파일 좌표 대신 새 서브포인트 생성" : "도로 직각 서브포인트 생성"}</label>
             {enableSubpoints && <div className="subOptionGrid">
               <label>도로 방향<select value={subSide} onChange={(e) => setSubSide(e.target.value as "left" | "right")}><option value="left">진행방향 왼쪽</option><option value="right">진행방향 오른쪽</option></select></label>
               <label>포인트 간격 (m)<input type="number" min="0.1" step="0.1" value={subSpacing} onChange={(e) => setSubSpacing(Number(e.target.value))} /></label>
               <label>포인트 개수<input type="number" min="1" step="1" value={subCount} onChange={(e) => setSubCount(Number(e.target.value))} /></label>
             </div>}
+            {mode === "import" && enableSubpoints && <p className="replaceWarning">계산하면 파일의 기존 서브포인트를 새 계산 결과로 교체합니다.</p>}
           </div>
           <div className="layerBox">
             <b>지도 레이어</b>
@@ -607,7 +611,7 @@ export default function Home() {
             <label className="check"><input type="checkbox" checked={showCadastral} onChange={(e) => setShowCadastral(e.target.checked)} disabled={!ready} /> 지적편집도 표시</label>
             <label className="check"><input type="checkbox" checked={showTraffic} onChange={(e) => setShowTraffic(e.target.checked)} disabled={!ready} /> 교통정보 표시</label>
           </div>
-          <button onClick={calculate} disabled={(mode === "import" ? importedPoints.length : path.length) < 2 || (mode !== "import" && interval <= 0)}>{mode === "import" ? "불러온 기준점으로 서브포인트 계산" : "조사 위치 계산"}</button>
+          <button onClick={calculate} disabled={(mode === "import" ? importedPoints.length : path.length) < 2 || (mode === "import" && !enableSubpoints) || (mode !== "import" && interval <= 0)}>{mode === "import" ? (enableSubpoints ? "새 서브포인트 생성 (기존 교체)" : "파일 좌표 표시 중") : "조사 위치 계산"}</button>
           <button className="hideConstruction" onClick={hideConstruction} disabled={!samples.length || !constructionVisible}>폴리라인·그리기 점 숨기기</button>
           <div className="divider" />
           {!!subPoints.length && <p className="subCount">서브포인트 <strong>{subPoints.length}개</strong></p>}
