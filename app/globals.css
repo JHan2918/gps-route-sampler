@@ -104,4 +104,15 @@ h2 { margin:0 0 9px; font-size:19px; letter-spacing:-.03em; }
 .sub-marker:hover { width:16px; height:16px; margin:-2px; background:#e95721; }
 .test-marker { width:48px; height:30px; display:grid; place-items:center; position:relative; border:2px solid #fff; border-radius:15px; background:#f2a93b; color:#fff; box-shadow:0 3px 10px #0005; font:700 11px Arial; }
 .test-marker:after { content:""; position:absolute; bottom:-8px; left:18px; border-width:7px 5px 0; border-style:solid; border-color:#f2a93b transparent transparent; }
+.maintenancePage { position:relative; isolation:isolate; width:100%; max-width:none; min-height:calc(100vh - 44px); display:grid; place-items:center; overflow:hidden; border:1px solid #dbe8e1; border-radius:24px; background:radial-gradient(circle at 18% 22%,#dff8ea 0 8%,transparent 27%),radial-gradient(circle at 82% 75%,#e2f5f4 0 7%,transparent 26%),linear-gradient(145deg,#fbfdfc,#f0f8f4); }
+.maintenancePage::before,.maintenancePage::after { content:""; position:absolute; z-index:-1; width:360px; height:360px; border:1px solid #bfe8d2; border-radius:50%; opacity:.42; }
+.maintenancePage::before { top:-210px; right:-110px; box-shadow:0 0 0 45px #dff5e933,0 0 0 90px #dff5e922; }
+.maintenancePage::after { bottom:-250px; left:-130px; box-shadow:0 0 0 50px #d9f1ec33,0 0 0 100px #d9f1ec22; }
+.maintenanceCard { position:relative; width:min(520px,calc(100% - 32px)); padding:34px 32px 40px; text-align:center; }
+.maintenanceGlow { position:absolute; z-index:-1; top:72px; left:50%; width:270px; height:270px; transform:translateX(-50%); border-radius:50%; background:#72d8aa38; filter:blur(35px); }
+.maintenanceImage { width:min(310px,80vw); height:auto; margin:-20px auto -10px; object-fit:contain; }
+.maintenanceLabel { margin:0 0 12px; color:#069953; font-size:12px; font-weight:900; letter-spacing:.32em; }
+.maintenanceCard h1 { margin:0; color:#14251e; font-size:clamp(30px,5vw,44px); letter-spacing:-.055em; }
+.maintenanceMessage { margin:18px 0 0; color:#687871; font-size:14px; line-height:1.8; }
 @media(max-width:760px){ body{padding:12px}.topbar{height:74px}.status{display:none}.workspace{grid-template-columns:1fr}.panel{order:2}.mapShell{min-height:55vh}.quickMapTools button{width:50px}.coordinateMapInfo{bottom:8px;left:8px;width:205px} }
+@media(max-width:560px){.maintenancePage{min-height:calc(100vh - 24px);border-radius:18px}.maintenanceCard{padding:24px 20px 34px}.maintenanceImage{width:min(270px,82vw)}.maintenanceMessage{font-size:13px}}
