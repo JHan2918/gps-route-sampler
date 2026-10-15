@@ -491,8 +491,22 @@ export default function Home() {
   function selectMapTool(tool: MapTool) {
     const next = mapTool === tool ? "none" : tool;
     if (mapTool === "measure" && next !== "measure") clearMeasurement();
+    mapToolRef.current = next;
     setMapTool(next);
     if (next !== "coordinate" && mode !== "test" && testMarker.current) {
+      testMarker.current.setMap(null);
+      testMarker.current = null;
+      setTestPoint(null);
+    }
+  }
+
+  function selectWorkMode(next: WorkMode) {
+    if (mapTool === "measure") clearMeasurement();
+    mapToolRef.current = "none";
+    setMapTool("none");
+    modeRef.current = next;
+    setMode(next);
+    if (next !== "test" && testMarker.current) {
       testMarker.current.setMap(null);
       testMarker.current = null;
       setTestPoint(null);
@@ -572,9 +586,9 @@ export default function Home() {
       <section className="workspace">
         <aside className="panel">
           <div className="modeSwitch" role="group" aria-label="지도 클릭 모드">
-            <button className={mode === "test" ? "active test" : ""} onClick={() => setMode("test")}>테스트 위치 확인</button>
-            <button className={mode === "draw" ? "active" : ""} onClick={() => setMode("draw")}>경로 그리기</button>
-            <button className={mode === "import" ? "active import" : ""} onClick={() => setMode("import")}>파일 불러와서 그리기</button>
+            <button className={mode === "test" ? "active test" : ""} onClick={() => selectWorkMode("test")}>테스트 위치 확인</button>
+            <button className={mode === "draw" ? "active" : ""} onClick={() => selectWorkMode("draw")}>경로 그리기</button>
+            <button className={mode === "import" ? "active import" : ""} onClick={() => selectWorkMode("import")}>파일 불러와서 그리기</button>
           </div>
           {mode === "test" && <div className="testPanel">
             <b>확인할 지점을 클릭하세요</b>
