@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type Point = { lat: number; lng: number; z?: number };
 type Sample = Point & { no: number; distance: number; bearing: number; name?: string };
@@ -165,6 +165,8 @@ export default function Home() {
   const sampleMarkers = useRef<any[]>([]);
   const subMarkers = useRef<any[]>([]);
   const testMarker = useRef<any>(null);
+  const addressMarker = useRef<any>(null);
+  const geocodeRequestId = useRef(0);
   const modeRef = useRef<WorkMode>("test");
   const mapToolRef = useRef<MapTool>("none");
   const measureLine = useRef<any>(null);
@@ -177,6 +179,9 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [scriptEnabled, setScriptEnabled] = useState(false);
   const [mapError, setMapError] = useState("");
+  const [addressQuery, setAddressQuery] = useState("");
+  const [addressMessage, setAddressMessage] = useState("");
+  const [addressSearching, setAddressSearching] = useState(false);
   const [path, setPath] = useState<Point[]>([]);
   const [interval, setInterval] = useState(5);
   const [includeEnd, setIncludeEnd] = useState(true);
@@ -341,6 +346,8 @@ export default function Home() {
   }, [mode, importedPoints, importedFileSubPoints, ready, clearSampleMarkers, clearSubMarkers]);
 
   useEffect(() => () => {
+    geocodeRequestId.current += 1;
+    addressMarker.current?.setMap(null);
     if (clickRef.current && window.naver?.maps) window.naver.maps.Event.removeListener(clickRef.current);
   }, []);
 
@@ -513,6 +520,37 @@ export default function Home() {
     }
   }
 
+  function searchAddress(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = addressQuery.trim();
+    const n = window.naver?.maps;
+    if (!query || !n?.Service || !mapRef.current) return;
+    const requestId = ++geocodeRequestId.current;
+    setAddressSearching(true);
+    setAddressMessage("");
+    n.Service.geocode({ query }, (status: any, response: any) => {
+      if (requestId !== geocodeRequestId.current) return;
+      setAddressSearching(false);
+      const result = response?.v2?.addresses?.[0];
+      if (status !== n.Service.Status.OK || !result) {
+        setAddressMessage("주소를 찾지 못했습니다.");
+        return;
+      }
+      const position = new n.LatLng(Number(result.y), Number(result.x));
+      addressMarker.current?.setMap(null);
+      addressMarker.current = new n.Marker({
+        map: mapRef.current,
+        position,
+        zIndex: 250,
+        title: result.roadAddress || result.jibunAddress || query,
+        icon: { content: '<div class="address-marker">검색</div>', anchor: new n.Point(24, 38) },
+      });
+      mapRef.current.setCenter(position);
+      mapRef.current.setZoom(17);
+      setAddressMessage(result.roadAddress || result.jibunAddress || query);
+    });
+  }
+
   function reset() {
     const n = window.naver?.maps;
     if (lineRef.current) {
@@ -527,6 +565,13 @@ export default function Home() {
     if (testMarker.current) {
       testMarker.current.setMap(null);
       testMarker.current = null;
+    }
+    geocodeRequestId.current += 1;
+    setAddressSearching(false);
+    setAddressMessage("");
+    if (addressMarker.current) {
+      addressMarker.current.setMap(null);
+      addressMarker.current = null;
     }
     if (cadastralLayer.current) cadastralLayer.current.setMap(null);
     if (trafficLayer.current) trafficLayer.current.setMap(null);
@@ -568,7 +613,7 @@ export default function Home() {
     <main>
       {scriptEnabled && <Script
         id="naver-map-sdk"
-        src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${CLIENT_ID}`}
+        src={`https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${CLIENT_ID}&submodules=geocoder`}
         strategy="afterInteractive"
         onLoad={initMap}
         onError={() => setMapError("네이버 지도 파일을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.")}
@@ -634,6 +679,11 @@ export default function Home() {
         </aside>
         <div className="mapShell">
           <div ref={mapNode} className="map" />
+          {ready && <form className="addressSearch" onSubmit={searchAddress}>
+            <input aria-label="이동할 주소" value={addressQuery} onChange={(event) => setAddressQuery(event.target.value)} placeholder="주소를 입력하세요" />
+            <button type="submit" disabled={!addressQuery.trim() || addressSearching}>{addressSearching ? "검색 중" : "이동"}</button>
+            {addressMessage && <span className={addressMessage === "주소를 찾지 못했습니다." ? "error" : ""}>{addressMessage}</span>}
+          </form>}
           {ready && mapTool === "coordinate" && <div className="coordinateMapInfo">
               <b>위치 좌표</b><p>지도에서 확인할 지점을 클릭하세요.</p>
               {testPoint ? (() => {
