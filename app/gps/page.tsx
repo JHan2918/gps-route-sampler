@@ -383,8 +383,12 @@ export default function Home() {
       const text = (await file.text()).replace(/^\uFEFF/, "");
       const lines = text.split(/\r?\n/).filter((line) => line.trim());
       if (lines.length < 2) throw new Error("좌표 행이 없습니다.");
-      const headers = lines[0].split(",").map((value) => value.trim().replace(/^"|"$/g, "").toLowerCase());
-      const findColumn = (names: string[]) => headers.findIndex((header) => names.includes(header));
+      const normalizeHeader = (value: string) => value.trim().replace(/^"|"$/g, "").toLowerCase().replace(/[\s_\-.:()[\]]/g, "");
+      const headers = lines[0].split(",").map(normalizeHeader);
+      const findColumn = (names: string[]) => {
+        const normalizedNames = names.map(normalizeHeader);
+        return headers.findIndex((header) => normalizedNames.includes(header));
+      };
       const latIndex = findColumn(["위도", "latitude", "lat", "y"]);
       const lngIndex = findColumn(["경도", "longitude", "lng", "lon", "long", "x"]);
       const koreaNIndex = findColumn(["n", "northing", "epsg5186_n_m", "epsg5186_n", "국내_n", "국내좌표_n"]);
@@ -392,7 +396,7 @@ export default function Home() {
       const zIndex = findColumn(["z_m", "높이", "고도", "elevation"]);
       const alternateZIndex = findColumn(["z"]);
       const kindIndex = findColumn(["구분", "type", "kind"]);
-      const nameIndex = findColumn(["이름", "name", "번호"]);
+      const nameIndex = findColumn(["이름", "name", "번호", "타겟이름", "타겟명", "타겟번호", "target", "target name", "target_name", "target id", "target_id", "point name", "point_name", "포인트명", "측점명", "id"]);
       const parentIndex = findColumn(["기준점", "parent"]);
       const distanceIndex = findColumn(["진행거리_m", "누적거리_m", "distance"]);
       const sideIndex = findColumn(["직각방향", "side"]);
@@ -424,15 +428,18 @@ export default function Home() {
         })
         .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng) && Math.abs(row.lat) <= 90 && Math.abs(row.lng) <= 180);
       const isNamedSubPoint = (cols: string[]) => nameIndex >= 0 && /^(.+?)[_-](\d+)$/.test(cols[nameIndex] || "");
-      const baseRows = rows.filter(({ cols }) => kindIndex >= 0
-        ? !cols[kindIndex] || cols[kindIndex] === "기준점"
-        : !isNamedSubPoint(cols));
+      const isExplicitSubPoint = (cols: string[]) => {
+        if (kindIndex < 0) return false;
+        const kind = normalizeHeader(cols[kindIndex] || "");
+        return ["서브포인트", "서브타겟", "subpoint", "subtarget", "sub"].map(normalizeHeader).includes(kind);
+      };
+      const baseRows = rows.filter(({ cols }) => kindIndex >= 0 ? !isExplicitSubPoint(cols) : !isNamedSubPoint(cols));
       const points = baseRows.map(({ cols, lat, lng, z }, index) => ({
         lat, lng, z,
         name: nameIndex >= 0 && cols[nameIndex] ? cols[nameIndex] : `t${index + 1}`,
       }));
       const loadedSubPoints: SubPoint[] = rows
-        .filter(({ cols }) => kindIndex >= 0 ? cols[kindIndex] === "서브포인트" : isNamedSubPoint(cols))
+        .filter(({ cols }) => kindIndex >= 0 ? isExplicitSubPoint(cols) : isNamedSubPoint(cols))
         .map(({ cols, lat, lng, z }, index) => {
           const pointName = nameIndex >= 0 && cols[nameIndex] ? cols[nameIndex] : `sub-${index + 1}`;
           const inferredParent = pointName.replace(/[_-]\d+$/, "");
