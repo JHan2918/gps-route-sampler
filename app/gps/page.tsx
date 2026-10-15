@@ -627,6 +627,11 @@ export default function Home() {
       />}
       <header className="topbar">
         <div><p className="eyebrow">FIELD ROUTE SAMPLER</p><h1>GPS 경로 좌표 도구</h1></div>
+        {ready && <form className="headerAddressSearch" onSubmit={searchAddress}>
+          <input aria-label="이동할 주소" value={addressQuery} onChange={(event) => setAddressQuery(event.target.value)} placeholder="주소를 입력하세요" />
+          <button type="submit" disabled={!addressQuery.trim() || addressSearching}>{addressSearching ? "검색 중" : "이동"}</button>
+          {addressMessage && <span className={addressMessage === "주소를 찾지 못했습니다." ? "error" : ""}>{addressMessage}</span>}
+        </form>}
         <div className="headerActions">
           <div className="quickMapTools">
             <button title="거리 측정" className={mapTool === "measure" ? "active measure" : ""} onClick={() => selectMapTool("measure")} disabled={!ready}>거리 측정</button>
@@ -686,11 +691,6 @@ export default function Home() {
         </aside>
         <div className="mapShell">
           <div ref={mapNode} className="map" />
-          {ready && <form className="addressSearch" onSubmit={searchAddress}>
-            <input aria-label="이동할 주소" value={addressQuery} onChange={(event) => setAddressQuery(event.target.value)} placeholder="주소를 입력하세요" />
-            <button type="submit" disabled={!addressQuery.trim() || addressSearching}>{addressSearching ? "검색 중" : "이동"}</button>
-            {addressMessage && <span className={addressMessage === "주소를 찾지 못했습니다." ? "error" : ""}>{addressMessage}</span>}
-          </form>}
           {ready && mapTool === "coordinate" && <div className="coordinateMapInfo">
               <b>위치 좌표</b><p>지도에서 확인할 지점을 클릭하세요.</p>
               {testPoint ? (() => {
