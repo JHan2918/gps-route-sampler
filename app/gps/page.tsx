@@ -17,6 +17,9 @@ declare global {
 }
 
 const CLIENT_ID = "gkiaj1k1r8";
+// 이 파일을 수정한 AI와 날짜. 수정할 때마다 함께 갱신한다 (예: "Codex", "Claude Opus 5")
+const LAST_EDITED_BY = "Claude Opus 5";
+const LAST_EDITED_AT = "2026-10-28";
 const R = 6371008.8;
 
 function toUtm({ lat, lng }: Point): UtmPoint {
@@ -630,6 +633,7 @@ export default function Home() {
         {ready && <form className="headerAddressSearch" onSubmit={searchAddress}>
           <input aria-label="이동할 주소" value={addressQuery} onChange={(event) => setAddressQuery(event.target.value)} placeholder="주소를 입력하세요" />
           <button type="submit" disabled={!addressQuery.trim() || addressSearching}>{addressSearching ? "검색 중" : "이동"}</button>
+          <span className="lastEdited" title={`최종 수정: ${LAST_EDITED_BY} / ${LAST_EDITED_AT}`}>{LAST_EDITED_BY} · {LAST_EDITED_AT}</span>
           {addressMessage && <span className={addressMessage === "주소를 찾지 못했습니다." ? "error" : ""}>{addressMessage}</span>}
         </form>}
         <div className="headerActions">
